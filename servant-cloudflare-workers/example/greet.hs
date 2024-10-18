@@ -10,11 +10,9 @@ import Data.Aeson
 import Data.Proxy
 import Data.Text
 import GHC.Generics
-import Network.Wai
-import Network.Wai.Handler.Warp
 import Prelude.Compat
-import Servant
 import Servant.Cloudflare.Workers.Generic ()
+import Servant.Cloudflare.Workers.Prelude
 import Prelude ()
 
 -- * Example
@@ -30,12 +28,19 @@ instance ToJSON Greet
 -- API specification
 type TestApi =
   -- GET /hello/:name?capital={true, false}  returns a Greet as JSON
-  "hello" :> Capture "name" Text :> QueryParam "capital" Bool :> Get '[JSON] Greet
+  "hello"
+    :> Capture "name" Text
+    :> QueryParam "capital" Bool
+    :> Get '[JSON] Greet
     -- POST /greet with a Greet as JSON in the request body,
     --             returns a Greet as JSON
-    :<|> "greet" :> ReqBody '[JSON] Greet :> Post '[JSON] Greet
+    :<|> "greet"
+    :> ReqBody '[JSON] Greet
+    :> Post '[JSON] Greet
     -- DELETE /greet/:greetid
-    :<|> "greet" :> Capture "greetid" Text :> Delete '[JSON] NoContent
+    :<|> "greet"
+    :> Capture "greetid" Text
+    :> Delete '[JSON] NoContent
     :<|> NamedRoutes OtherRoutes
 
 data OtherRoutes mode = OtherRoutes
@@ -53,7 +58,7 @@ testApi = Proxy
 -- that represents the API, are glued together using :<|>.
 --
 -- Each handler runs in the 'Handler' monad.
-server :: Server TestApi
+server :: Worker e TestApi
 server = helloH :<|> postGreetH :<|> deleteGreetH :<|> otherRoutes
   where
     otherRoutes = OtherRoutes {..}
@@ -71,15 +76,9 @@ server = helloH :<|> postGreetH :<|> deleteGreetH :<|> otherRoutes
 
 -- Turn the server into a WAI app. 'serve' is provided by servant,
 -- more precisely by the Servant.Cloudflare.Workers module.
-test :: Application
-test = serve testApi server
-
--- Run the server.
---
--- 'run' comes from Network.Wai.Handler.Warp
-runTestServer :: Port -> IO ()
-runTestServer port = run port test
+test :: FetchHandler e
+test = serve Proxy testApi server
 
 -- Put this all to work!
 main :: IO ()
-main = runTestServer 8001
+main = pure ()

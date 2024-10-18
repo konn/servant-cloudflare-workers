@@ -115,7 +115,6 @@ library
     Servant.Cloudflare.Workers.Internal.ServerError
     Servant.Cloudflare.Workers.Prelude
     Servant.Cloudflare.Workers.ReadableStream
-    Servant.Cloudflare.Workers.StaticFiles
     Servant.Cloudflare.Workers.UVerb
 
   -- Bundled with GHC: Lower bound to not force re-installs
@@ -176,54 +175,6 @@ executable greet
     base-compat,
     servant-cloudflare-workers,
     text,
-    wai,
 
   build-depends:
-    aeson >=1.4.1.0 && <3,
-    warp >=3.2.25 && <3.5,
-
-test-suite spec
-  import: extensions
-  import: ghc-options
-  type: exitcode-stdio-1.0
-  hs-source-dirs: test
-  main-is: Spec.hs
-  other-modules:
-    Servant.ArbitraryMonadServerSpec
-    Servant.Cloudflare.Workers.ErrorSpec
-    Servant.Cloudflare.Workers.Internal.ContextSpec
-    Servant.Cloudflare.Workers.Internal.RoutingApplicationSpec
-    Servant.Cloudflare.Workers.RouterSpec
-    Servant.Cloudflare.Workers.StaticFilesSpec
-    Servant.Cloudflare.Workers.StreamingSpec
-    Servant.Cloudflare.Workers.UsingContextSpec
-    Servant.Cloudflare.Workers.UsingContextSpec.TestCombinators
-    Servant.Cloudflare.WorkersSpec
-    Servant.HoistSpec
-
-  -- Dependencies inherited from the library. No need to specify bounds.
-  build-depends:
-    base,
-    base-compat,
-    base64-bytestring,
-    bytestring,
-    http-types,
-    mtl,
-    resourcet,
-    safe,
-    servant,
-    servant-cloudflare-workers,
-    text,
-    wai,
-
-  -- Additional dependencies
-  build-depends:
-    aeson >=1.4.1.0 && <3,
-    directory >=1.3.0.0 && <1.4,
-    hspec >=2.6.0 && <2.12,
-    hspec-wai >=0.10.1 && <0.12,
-    should-not-typecheck >=2.1.0 && <2.2,
-    temporary >=1.3 && <1.4,
-    wai-extra >=3.0.24.3 && <3.2,
-
-  build-tool-depends: hspec-discover:hspec-discover >=2.6.0 && <2.12
+    aeson >=1.4.1.0 && <3

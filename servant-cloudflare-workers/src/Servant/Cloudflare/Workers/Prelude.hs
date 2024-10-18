@@ -7,7 +7,6 @@ module Servant.Cloudflare.Workers.Prelude (
   module Servant.Cloudflare.Workers,
   -- | Utilities on top of the servant core
   module Servant.Links,
-  module Servant.Cloudflare.Workers.StaticFiles,
   -- | Useful re-exports
   Proxy (..),
   throwError,
@@ -19,5 +18,4 @@ import Control.Monad.Error.Class (
 import Data.Proxy
 import Servant.API
 import Servant.Cloudflare.Workers
-import Servant.Cloudflare.Workers.StaticFiles
 import Servant.Links

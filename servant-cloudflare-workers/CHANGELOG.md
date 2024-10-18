@@ -407,7 +407,7 @@ Compatibility with GHC 9.4, see [PR #1592](https://github.com/haskell-servant/se
 * Add a `RouteMismatch` constructor for arbitrary HTTP response codes (https://github.com/haskell-servant/servant-server/pull/22)
 * Add support for the `Patch` combinator
 * Support for `Accept`/`Content-type` headers and for the content-type aware combinators in *servant-0.4*
-* Export `toApplication` from `Servant.Cloudflare.Workers` (https://github.com/haskell-servant/servant-server/pull/29)
+* Export `toFetchHandler` from `Servant.Cloudflare.Workers` (https://github.com/haskell-servant/servant-server/pull/29)
 * Support other Monads than just `EitherT (Int, String) IO` (https://github.com/haskell-servant/servant-server/pull/21)
 * Make methods return status code 204 if they return () (https://github.com/haskell-servant/servant-server/issues/28)
 * Add server support for response headers

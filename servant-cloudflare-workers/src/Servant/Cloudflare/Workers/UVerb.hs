@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -32,6 +33,8 @@ import Servant.API.ContentTypes (AllCTRender (handleAcceptH), AllMime)
 import Servant.API.ResponseHeaders (GetHeaders (..), Headers (..))
 import Servant.API.UVerb (HasStatus, IsMember, Statuses, UVerb, Union, Unique, WithStatus (..), foldMapUnion, inject, statusOf)
 import Servant.Cloudflare.Workers.Internal (Context, Delayed, Handler, HasWorker (..), RouteResult (FailFatal, Route), Router, Worker, WorkerT, acceptCheck, addAcceptCheck, addMethodCheck, allowedMethodHead, err406, getAcceptHeader, leafRouter, methodCheck, runAction)
+import Servant.Cloudflare.Workers.Internal.Response
+import Servant.Cloudflare.Workers.Internal.RoutingApplication
 
 {- | 'return' for 'UVerb' handlers.  Takes a value of any of the members of the open union,
 and will construct a union value in an 'Applicative' (eg. 'Worker').
@@ -96,32 +99,33 @@ instance
   -- constraint it won't have to run more than one parser in weird
   -- corner cases.
   ) =>
-  HasWorker (UVerb method contentTypes as) context
+  HasWorker e (UVerb method contentTypes as) context
   where
-  type WorkerT (UVerb method contentTypes as) m = m (Union as)
+  type WorkerT e (UVerb method contentTypes as) m = m (Union as)
 
-  hoistWorkerWithContext _ _ nt s = nt s
+  hoistWorkerWithContext _ _ _ nt s = nt s
 
   route ::
     forall env.
+    Proxy e ->
     Proxy (UVerb method contentTypes as) ->
     Context context ->
-    Delayed env (Worker (UVerb method contentTypes as)) ->
-    Router env
-  route _proxy _ctx action = leafRouter route'
+    Delayed e env (Worker e (UVerb method contentTypes as)) ->
+    Router e env
+  route _ _proxy _ctx action = leafRouter route'
     where
       method = reflectMethod (Proxy @method)
-      route' env request cont = do
-        let action' :: Delayed env (Handler (Union as))
+      route' env request b ctx cont = do
+        let action' :: Delayed e env (Handler e (Union as))
             action' =
               action
                 `addMethodCheck` methodCheck method request
-                `addAcceptCheck` acceptCheck (Proxy @contentTypes) (getAcceptHeader request)
+                `addAcceptCheck` acceptCheck (Proxy @contentTypes) (getAcceptHeader request.rawRequest)
 
-        runAction action' env request cont $ \(output :: Union as) -> do
+        runAction action' env request.rawRequest b ctx cont $ \(output :: Union as) -> do
           let cts = Proxy @contentTypes
               pickResource :: Union as -> (Status, Maybe (BSL.ByteString, BSL.ByteString), [(HeaderName, B.ByteString)])
-              pickResource = foldMapUnion (Proxy @(IsServerResourceWithStatus contentTypes)) (encodeResource request cts)
+              pickResource = foldMapUnion (Proxy @(IsServerResourceWithStatus contentTypes)) (encodeResource request.rawRequest cts)
           case pickResource output of
             (_, Nothing, _) -> FailFatal err406 -- this should not happen (checked before), so we make it fatal if it does
             (status, Just (contentT, body), headers) ->

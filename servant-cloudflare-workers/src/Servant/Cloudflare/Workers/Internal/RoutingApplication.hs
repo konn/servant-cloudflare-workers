@@ -25,8 +25,8 @@ type RoutingApplication e =
   (RouteResult PartialResponse -> IO WorkerResponse) ->
   IO WorkerResponse
 
-toApplication :: RoutingApplication e -> FetchHandler e
-toApplication ra rawRequest env ctx =
+toFetchHandler :: RoutingApplication e -> FetchHandler e
+toFetchHandler ra rawRequest env ctx =
   let pathInfo = decodePathSegments $ extractPath $ TE.encodeUtf8 $ Req.getUrl rawRequest
       req0 = RoutingRequest {..}
    in ra req0 env ctx routingRespond

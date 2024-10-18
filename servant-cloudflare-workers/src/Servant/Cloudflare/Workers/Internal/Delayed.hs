@@ -95,16 +95,16 @@ parsing fails. Query parameter checks provide inputs to the handler
 
 7. Body check. The request body check can cause 400.
 -}
-data Delayed env c where
+data Delayed e env c where
   Delayed ::
-    { capturesD :: env -> DelayedIO captures
-    , methodD :: DelayedIO ()
-    , authD :: DelayedIO auth
-    , acceptD :: DelayedIO ()
-    , contentD :: DelayedIO contentType
-    , paramsD :: DelayedIO params
-    , headersD :: DelayedIO headers
-    , bodyD :: contentType -> DelayedIO body
+    { capturesD :: env -> DelayedIO e captures
+    , methodD :: DelayedIO e ()
+    , authD :: DelayedIO e auth
+    , acceptD :: DelayedIO e ()
+    , contentD :: DelayedIO e contentType
+    , paramsD :: DelayedIO e params
+    , headersD :: DelayedIO e headers
+    , bodyD :: contentType -> DelayedIO e body
     , serverD ::
         captures ->
         params ->
@@ -114,9 +114,9 @@ data Delayed env c where
         WorkerRequest ->
         RouteResult c
     } ->
-    Delayed env c
+    Delayed e env c
 
-instance Functor (Delayed env) where
+instance Functor (Delayed e env) where
   fmap f Delayed {..} =
     Delayed
       { serverD = \c p h a b req -> f <$> serverD c p h a b req
@@ -124,7 +124,7 @@ instance Functor (Delayed env) where
       } -- Note [Existential Record Update]
 
 -- | A 'Delayed' without any stored checks.
-emptyDelayed :: RouteResult a -> Delayed env a
+emptyDelayed :: RouteResult a -> Delayed e env a
 emptyDelayed result =
   Delayed (const r) r r r r r r (const r) (\_ _ _ _ _ _ -> result)
   where
@@ -132,9 +132,9 @@ emptyDelayed result =
 
 -- | Add a capture to the end of the capture block.
 addCapture ::
-  Delayed env (a -> b) ->
-  (captured -> DelayedIO a) ->
-  Delayed (captured, env) b
+  Delayed e env (a -> b) ->
+  (captured -> DelayedIO e a) ->
+  Delayed e (captured, env) b
 addCapture Delayed {..} new =
   Delayed
     { capturesD = \(txt, env) -> (,) <$> capturesD env <*> new txt
@@ -144,9 +144,9 @@ addCapture Delayed {..} new =
 
 -- | Add a parameter check to the end of the params block
 addParameterCheck ::
-  Delayed env (a -> b) ->
-  DelayedIO a ->
-  Delayed env b
+  Delayed e env (a -> b) ->
+  DelayedIO e a ->
+  Delayed e env b
 addParameterCheck Delayed {..} new =
   Delayed
     { paramsD = (,) <$> paramsD <*> new
@@ -156,9 +156,9 @@ addParameterCheck Delayed {..} new =
 
 -- | Add a parameter check to the end of the params block
 addHeaderCheck ::
-  Delayed env (a -> b) ->
-  DelayedIO a ->
-  Delayed env b
+  Delayed e env (a -> b) ->
+  DelayedIO e a ->
+  Delayed e env b
 addHeaderCheck Delayed {..} new =
   Delayed
     { headersD = (,) <$> headersD <*> new
@@ -168,9 +168,9 @@ addHeaderCheck Delayed {..} new =
 
 -- | Add a method check to the end of the method block.
 addMethodCheck ::
-  Delayed env a ->
-  DelayedIO () ->
-  Delayed env a
+  Delayed e env a ->
+  DelayedIO e () ->
+  Delayed e env a
 addMethodCheck Delayed {..} new =
   Delayed
     { methodD = methodD <* new
@@ -179,9 +179,9 @@ addMethodCheck Delayed {..} new =
 
 -- | Add an auth check to the end of the auth block.
 addAuthCheck ::
-  Delayed env (a -> b) ->
-  DelayedIO a ->
-  Delayed env b
+  Delayed e env (a -> b) ->
+  DelayedIO e a ->
+  Delayed e env b
 addAuthCheck Delayed {..} new =
   Delayed
     { authD = (,) <$> authD <*> new
@@ -195,12 +195,12 @@ We'll report failed content type check (415), before trying to parse
 query parameters (400). Which, in turn, happens before request body parsing.
 -}
 addBodyCheck ::
-  Delayed env (a -> b) ->
+  Delayed e env (a -> b) ->
   -- | content type check
-  DelayedIO c ->
+  DelayedIO e c ->
   -- | body check
-  (c -> DelayedIO a) ->
-  Delayed env b
+  (c -> DelayedIO e a) ->
+  Delayed e env b
 addBodyCheck Delayed {..} newContentD newBodyD =
   Delayed
     { contentD = (,) <$> contentD <*> newContentD
@@ -221,9 +221,9 @@ body check further so that it can still be run in a situation
 where we'd otherwise report 406).
 -}
 addAcceptCheck ::
-  Delayed env a ->
-  DelayedIO () ->
-  Delayed env a
+  Delayed e env a ->
+  DelayedIO e () ->
+  Delayed e env a
 addAcceptCheck Delayed {..} new =
   Delayed
     { acceptD = acceptD *> new
@@ -234,7 +234,7 @@ addAcceptCheck Delayed {..} new =
 the handler without the possibility of failure. In such a
 case, 'passToServer' can be used.
 -}
-passToServer :: Delayed env (a -> b) -> (WorkerRequest -> a) -> Delayed env b
+passToServer :: Delayed e env (a -> b) -> (WorkerRequest -> a) -> Delayed e env b
 passToServer Delayed {..} x =
   Delayed
     { serverD = \c p h a b req -> ($ x req) <$> serverD c p h a b req
@@ -249,12 +249,14 @@ This should only be called once per request; otherwise the guarantees about
 effect and HTTP error ordering break down.
 -}
 runDelayed ::
-  Delayed env a ->
+  Delayed e env a ->
   env ->
   WorkerRequest ->
+  JSObject e ->
+  FetchContext ->
   ResourceT IO (RouteResult a)
 runDelayed Delayed {..} env = runDelayedIO $ do
-  r <- ask
+  (_, r) <- ask
   c <- capturesD env
   methodD
   a <- authD
@@ -271,7 +273,7 @@ Also takes a continuation for how to turn the
 result of the delayed server into a response.
 -}
 runAction ::
-  Delayed env (Handler e a) ->
+  Delayed e env (Handler e a) ->
   env ->
   WorkerRequest ->
   JSObject e ->
@@ -281,7 +283,7 @@ runAction ::
   IO r
 runAction action env req bind fenv respond k =
   runResourceT $
-    runDelayed action env req >>= go >>= liftIO . respond
+    runDelayed action env req bind fenv >>= go >>= liftIO . respond
   where
     go (Fail e) = return $ Fail e
     go (FailFatal e) = return $ FailFatal e

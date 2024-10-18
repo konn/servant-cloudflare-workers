@@ -16,7 +16,6 @@ module Servant.Cloudflare.Workers.Internal (
 ) where
 
 import Control.Monad (
-  guard,
   join,
   when,
  )
@@ -166,7 +165,7 @@ class HasWorker (e :: Prototype) api context where
     Proxy e ->
     Proxy api ->
     Context context ->
-    Delayed env (Worker e api) ->
+    Delayed e env (Worker e api) ->
     Router e env
 
   hoistWorkerWithContext ::
@@ -249,7 +248,7 @@ instance
         pe
         (Proxy :: Proxy api)
         context
-        ( addCapture d $ \txt -> withRequest $ \request ->
+        ( addCapture d $ \txt -> withRequest $ \request _ _ ->
             case ( sbool :: SBool (FoldLenient mods)
                  , parseUrlPiece txt :: Either T.Text a
                  ) of
@@ -301,7 +300,7 @@ instance
         pe
         (Proxy :: Proxy api)
         context
-        ( addCapture d $ \txts -> withRequest $ \request ->
+        ( addCapture d $ \txts -> withRequest $ \request _ _ ->
             case parseUrlPieces txts of
               Left e -> delayedFail $ formatError rep request $ T.unpack e
               Right v -> return v
@@ -344,7 +343,7 @@ instance
 
   route pe Proxy context d = route pe (Proxy @api) context (d `addParameterCheck` allocateResource)
     where
-      allocateResource :: DelayedIO (ReleaseKey, a)
+      allocateResource :: DelayedIO e (ReleaseKey, a)
       allocateResource = DelayedIO $ lift $ allocateAcquire (getContextEntry context)
 
 fromJSBS :: JSByteString -> B.ByteString
@@ -360,7 +359,7 @@ allowedMethodHead method request = method == methodGet && requestMethod request 
 allowedMethod :: Method -> RoutingRequest -> Bool
 allowedMethod method request = allowedMethodHead method request || requestMethod request == method
 
-methodCheck :: Method -> RoutingRequest -> DelayedIO ()
+methodCheck :: Method -> RoutingRequest -> DelayedIO e ()
 methodCheck method request
   | allowedMethod method request = return ()
   | otherwise = delayedFail err405
@@ -372,7 +371,7 @@ methodCheck method request
 -- body check is no longer an option. However, we now run the accept
 -- check before the body check and can therefore afford to make it
 -- recoverable.
-acceptCheck :: (AllMime list) => Proxy list -> AcceptHeader -> DelayedIO ()
+acceptCheck :: (AllMime list) => Proxy list -> AcceptHeader -> DelayedIO e ()
 acceptCheck proxy accH
   | canHandleAcceptH proxy accH = return ()
   | otherwise = delayedFail err406
@@ -384,7 +383,7 @@ methodRouter ::
   Method ->
   Proxy ctypes ->
   Status ->
-  Delayed env (Handler e b) ->
+  Delayed e env (Handler e b) ->
   Router e env
 methodRouter splitHeaders method proxy status action = leafRouter route'
   where
@@ -409,26 +408,10 @@ methodRouter splitHeaders method proxy status action = leafRouter route'
                   let bdy = if allowedMethodHead method request then "" else body
                    in Route $ responseLBS status ((hContentType, BSL.toStrict contentT) : headers) bdy
 
-responseLBS ::
-  Status ->
-  [(HeaderName, B.StrictByteString)] ->
-  BSL.ByteString ->
-  PartialResponse
-responseLBS status headers bdy =
-  PartialResponse
-    { status = status
-    , headers
-    , encodeBody = Nothing
-    , cloudflare = Nothing
-    , body = do
-        guard $ not $ BSL.null bdy
-        Just $ WorkerResponseLBS bdy
-    }
-
 noContentRouter ::
   Method ->
   Status ->
-  Delayed env (Handler e b) ->
+  Delayed e env (Handler e b) ->
   Router e env
 noContentRouter method status action = leafRouter route'
   where
@@ -530,7 +513,7 @@ streamRouter ::
   Status ->
   Proxy framing ->
   Proxy ctype ->
-  Delayed env (Handler e c) ->
+  Delayed e env (Handler e c) ->
   Router e env
 streamRouter splitHeaders method status _ ctypeproxy action = leafRouter $ \env request b fctx respond ->
   let AcceptHeader accH = getAcceptHeader request.rawRequest
@@ -609,8 +592,7 @@ instance
       headerName :: (IsString n) => n
       headerName = fromString $ symbolVal (Proxy :: Proxy sym)
 
-      headerCheck :: WorkerRequest -> DelayedIO (RequestArgument mods a)
-      headerCheck req =
+      headerCheck req _ _ =
         unfoldRequestArgument (Proxy :: Proxy mods) errReq errSt mev
         where
           mev :: Maybe (Either T.Text a)
@@ -676,7 +658,7 @@ instance
         rep = typeRep (Proxy :: Proxy QueryParam')
         formatError = urlParseErrorFormatter $ getContextEntry (mkContextWithErrorFormatter context)
 
-        parseParam :: WorkerRequest -> DelayedIO (RequestArgument mods a)
+        parseParam :: WorkerRequest -> DelayedIO e (RequestArgument mods a)
         parseParam req =
           unfoldRequestArgument (Proxy :: Proxy mods) errReq errSt mev
           where
@@ -698,7 +680,7 @@ instance
                       <> " failed: "
                       <> e
 
-        delayed = addParameterCheck subserver . withRequest $ \req ->
+        delayed = addParameterCheck subserver . withRequest $ \req _ _ ->
           parseParam req
      in route pe (Proxy :: Proxy api) context delayed
 
@@ -747,7 +729,7 @@ instance
       formatError = urlParseErrorFormatter $ getContextEntry (mkContextWithErrorFormatter context)
 
       paramname = T.pack $ symbolVal (Proxy :: Proxy sym)
-      paramsCheck req =
+      paramsCheck req _ _ =
         case partitionEithers $ fmap parseQueryParam params of
           ([], parsed) -> return parsed
           (errs, _) ->
@@ -884,7 +866,7 @@ instance
       formatError = urlParseErrorFormatter $ getContextEntry (mkContextWithErrorFormatter context)
 
       paramname = T.pack $ symbolVal (Proxy :: Proxy sym)
-      paramsCheck req =
+      paramsCheck req _ _ =
         let relevantParams :: [(T.Text, Maybe T.Text)]
             relevantParams =
               mapMaybe isRelevantParam
@@ -940,7 +922,7 @@ instance HasWorker e Raw context where
     -- note: a Raw application doesn't register any cleanup
     -- but for the sake of consistency, we nonetheless run
     -- the cleanup once its done
-    r <- runDelayed rawApplication env request.rawRequest
+    r <- runDelayed rawApplication env request.rawRequest wenv fctx
     liftIO $ go r request wenv fctx respond
     where
       go r request wenv fctx respond = case r of
@@ -966,12 +948,12 @@ instance HasWorker e RawM context where
       (RouteResult PartialResponse -> IO WorkerResponse) ->
       m WorkerResponse
 
-  route _ _ _ handleDelayed = RawRouter $ \env request b fctx respond -> runResourceT $ do
-    routeResult <- runDelayed handleDelayed env request.rawRequest
+  route _ _ _ handleDelayed = RawRouter $ \env request wenv fctx respond -> runResourceT $ do
+    routeResult <- runDelayed handleDelayed env request.rawRequest wenv fctx
     let respond' = liftIO . respond
     liftIO $ case routeResult of
       Route handler ->
-        runHandler b fctx (handler request b fctx respond)
+        runHandler wenv fctx (handler request wenv fctx respond)
           >>= \case
             Left e -> respond' $ FailFatal e
             Right a -> pure a
@@ -1027,7 +1009,7 @@ instance
       formatError = bodyParserErrorFormatter $ getContextEntry (mkContextWithErrorFormatter context)
 
       -- Content-Type check, we only lookup we can try to parse the request body
-      ctCheck = withRequest $ \request -> do
+      ctCheck = withRequest $ \request _ _ -> do
         -- See HTTP RFC 2616, section 7.2.1
         -- http://www.w3.org/Protocols/rfc2616/rfc2616-sec7.html#sec7.2.1
         -- See also "W3C Internet Media Type registration, consistency of use"
@@ -1041,7 +1023,7 @@ instance
           Just f -> return f
 
       -- Body check, we get a body parsing functions as the first argument.
-      bodyCheck f = withRequest $ \request -> do
+      bodyCheck f = withRequest $ \request _ _ -> do
         mrqbody <- f <$> liftIO (lazyRequestBody request)
         case sbool :: SBool (FoldLenient mods) of
           STrue -> return mrqbody
@@ -1067,12 +1049,12 @@ instance
     route pe (Proxy :: Proxy api) context $
       addBodyCheck subserver ctCheck bodyCheck
     where
-      ctCheck :: DelayedIO (ReadableStream -> IO a)
+      ctCheck :: DelayedIO e (ReadableStream -> IO a)
       -- TODO: do content-type check
       ctCheck = return fromReadableStreamIO
 
-      bodyCheck :: (ReadableStream -> IO a) -> DelayedIO a
-      bodyCheck fromRS = withRequest $ \req -> do
+      bodyCheck :: (ReadableStream -> IO a) -> DelayedIO e a
+      bodyCheck fromRS = withRequest $ \req _ _ -> do
         liftIO $ fromRS =<< reqBodyToStream req
 
 reqBodyToStream :: WorkerRequest -> IO ReadableStream
@@ -1183,7 +1165,7 @@ instance
     where
       realm = BC8.pack $ symbolVal (Proxy :: Proxy realm)
       basicAuthContext = getContextEntry context
-      authCheck = withRequest $ \req -> runBasicAuth req realm basicAuthContext
+      authCheck = withRequest $ \req _ _ -> runBasicAuth req realm basicAuthContext
 
   hoistWorkerWithContext pe _ pc nt s =
     hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s

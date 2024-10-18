@@ -78,7 +78,7 @@ decodeBAHdr req = do
 {- | Run and check basic authentication, returning the appropriate http error per
 the spec.
 -}
-runBasicAuth :: WorkerRequest -> BS.ByteString -> BasicAuthCheck usr -> DelayedIO usr
+runBasicAuth :: WorkerRequest -> BS.ByteString -> BasicAuthCheck usr -> DelayedIO e usr
 runBasicAuth req realm (BasicAuthCheck ba) =
   case decodeBAHdr req of
     Nothing -> plzAuthenticate

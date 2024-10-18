@@ -29,7 +29,10 @@ import Control.Monad.Trans.Resource (
   transResourceT,
   withInternalState,
  )
+import GHC.Wasm.Object.Builtins
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
+import Servant.Cloudflare.Workers.Internal.Handler (HandlerEnv (..))
 import Servant.Cloudflare.Workers.Internal.RouteResult
 import Servant.Cloudflare.Workers.Internal.ServerError
 
@@ -38,47 +41,47 @@ incoming 'Request', may perform 'IO', and result in a
 'RouteResult', meaning they can either succeed, fail
 (with the possibility to recover), or fail fatally.
 -}
-newtype DelayedIO a = DelayedIO {runDelayedIO' :: ReaderT WorkerRequest (ResourceT (RouteResultT IO)) a}
+newtype DelayedIO e a = DelayedIO {runDelayedIO' :: ReaderT (HandlerEnv e, WorkerRequest) (ResourceT (RouteResultT IO)) a}
   deriving newtype
     ( Functor
     , Applicative
     , Monad
     , MonadIO
-    , MonadReader WorkerRequest
+    , MonadReader (HandlerEnv e, WorkerRequest)
     , MonadThrow
     , MonadResource
     )
 
-instance MonadBase IO DelayedIO where
+instance MonadBase IO (DelayedIO e) where
   liftBase = liftIO
 
-liftRouteResult :: RouteResult a -> DelayedIO a
+liftRouteResult :: RouteResult a -> DelayedIO e a
 liftRouteResult x = DelayedIO $ lift . lift $ RouteResultT . return $ x
 
-instance MonadBaseControl IO DelayedIO where
+instance MonadBaseControl IO (DelayedIO e) where
   -- type StM DelayedIO a = StM (ReaderT Request (ResourceT (RouteResultT IO))) a
   -- liftBaseWith f = DelayedIO $ liftBaseWith $ \g -> f (g . runDelayedIO')
   -- restoreM       = DelayedIO . restoreM
 
-  type StM DelayedIO a = RouteResult a
+  type StM (DelayedIO e) a = RouteResult a
   liftBaseWith f = DelayedIO $ ReaderT $ \req -> withInternalState $ \s ->
     liftBaseWith $ \runInBase -> f $ \x ->
       runInBase (runInternalState (runReaderT (runDelayedIO' x) req) s)
   restoreM = DelayedIO . lift . withInternalState . const . restoreM
 
-runDelayedIO :: DelayedIO a -> WorkerRequest -> ResourceT IO (RouteResult a)
-runDelayedIO m req = transResourceT runRouteResultT $ runReaderT (runDelayedIO' m) req
+runDelayedIO :: DelayedIO e a -> WorkerRequest -> JSObject e -> FetchContext -> ResourceT IO (RouteResult a)
+runDelayedIO m req bindings fetchContext = transResourceT runRouteResultT $ runReaderT (runDelayedIO' m) (HandlerEnv {..}, req)
 
 -- | Fail with the option to recover.
-delayedFail :: ServerError -> DelayedIO a
+delayedFail :: ServerError -> DelayedIO e a
 delayedFail err = liftRouteResult $ Fail err
 
 -- | Fail fatally, i.e., without any option to recover.
-delayedFailFatal :: ServerError -> DelayedIO a
+delayedFailFatal :: ServerError -> DelayedIO e a
 delayedFailFatal err = liftRouteResult $ FailFatal err
 
 -- | Gain access to the incoming request.
-withRequest :: (WorkerRequest -> DelayedIO a) -> DelayedIO a
+withRequest :: (WorkerRequest -> JSObject e -> FetchContext -> DelayedIO e a) -> DelayedIO e a
 withRequest f = do
-  req <- ask
-  f req
+  (HandlerEnv {..}, req) <- ask
+  f req bindings fetchContext

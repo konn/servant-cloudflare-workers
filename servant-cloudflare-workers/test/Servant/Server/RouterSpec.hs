@@ -47,7 +47,7 @@ routerSpec :: Spec
 routerSpec = do
   describe "tweakResponse" $ do
     let app' :: Application
-        app' = toApplication $ runRouter (const err404) router'
+        app' = toFetchHandler $ runRouter (const err404) router'
 
         router', router :: Router ()
         router' = tweakResponse (fmap twk) router
@@ -63,7 +63,7 @@ routerSpec = do
 
   describe "runRouter" $ do
     let toApp :: Router () -> Application
-        toApp = toApplication . runRouter (const err404)
+        toApp = toFetchHandler . runRouter (const err404)
 
         cap :: Router ()
         cap =

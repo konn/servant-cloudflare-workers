@@ -29,11 +29,10 @@ import GHC.Generics (
   Generic,
  )
 import Network.Cloudflare.Worker.Request (
-  CloudflareRequest,
+  WorkerRequest,
  )
 import Servant.API.Experimental.Auth
 import Servant.Cloudflare.Workers.Internal (
-  DelayedIO,
   Handler,
   HasContextEntry,
   HasWorker (..),
@@ -60,31 +59,31 @@ type family AuthServerData a :: Type
 
 NOTE: THIS API IS EXPERIMENTAL AND SUBJECT TO CHANGE
 -}
-newtype AuthHandler r usr = AuthHandler
-  {unAuthHandler :: r -> Handler usr}
+newtype AuthHandler e r usr = AuthHandler
+  {unAuthHandler :: r -> Handler e usr}
   deriving (Functor, Generic, Typeable)
 
 -- | NOTE: THIS API IS EXPERIMENTAL AND SUBJECT TO CHANGE
-mkAuthHandler :: (r -> Handler usr) -> AuthHandler r usr
+mkAuthHandler :: (r -> Handler e usr) -> AuthHandler e r usr
 mkAuthHandler = AuthHandler
 
 -- | Known orphan instance.
 instance
-  ( HasWorker api context
-  , HasContextEntry context (AuthHandler Request (AuthServerData (AuthProtect tag)))
+  ( HasWorker e api context
+  , HasContextEntry context (AuthHandler e WorkerRequest (AuthServerData (AuthProtect tag)))
   ) =>
-  HasWorker (AuthProtect tag :> api) context
+  HasWorker e (AuthProtect tag :> api) context
   where
   type
-    WorkerT (AuthProtect tag :> api) m =
-      AuthServerData (AuthProtect tag) -> WorkerT api m
+    WorkerT e (AuthProtect tag :> api) m =
+      AuthServerData (AuthProtect tag) -> WorkerT e api m
 
-  hoistWorkerWithContext _ pc nt s = hoistWorkerWithContext (Proxy :: Proxy api) pc nt . s
+  hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
 
-  route Proxy context subserver =
-    route (Proxy :: Proxy api) context (subserver `addAuthCheck` withRequest authCheck)
+  route pe Proxy context subserver =
+    route pe (Proxy :: Proxy api) context (subserver `addAuthCheck` withRequest authCheck)
     where
-      authHandler :: Request -> Handler (AuthServerData (AuthProtect tag))
       authHandler = unAuthHandler (getContextEntry context)
-      authCheck :: Request -> DelayedIO (AuthServerData (AuthProtect tag))
-      authCheck = (>>= either delayedFailFatal return) . liftIO . runHandler . authHandler
+      authCheck req wenv fctx =
+        liftIO (runHandler wenv fctx $ authHandler req)
+          >>= either delayedFailFatal return

@@ -18,7 +18,7 @@ module Servant.Cloudflare.Workers (
   ServerContext,
 
   -- * Construct a wai Application from an API
-  toApplication,
+  toFetchHandler,
 
   -- * Handlers for all standard combinators
   HasWorker (..),
@@ -27,7 +27,6 @@ module Servant.Cloudflare.Workers (
   emptyServer,
   Handler (..),
   runHandler,
-  pattern MkHandler,
 
   -- * Debugging the server layout
   layout,
@@ -118,7 +117,7 @@ module Servant.Cloudflare.Workers (
   getAcceptHeader,
 
   -- * Re-exports
-  Application,
+  FetchHandler,
   Tagged (..),
   module Servant.Cloudflare.Workers.UVerb,
 ) where
@@ -132,6 +131,7 @@ import Data.Tagged (
 import Data.Text (
   Text,
  )
+import Network.Cloudflare.Worker.Handler.Fetch
 import Servant.Cloudflare.Workers.Internal
 import Servant.Cloudflare.Workers.UVerb
 
@@ -168,8 +168,8 @@ Example:
 > main :: IO ()
 > main = Network.Wai.Handler.Warp.run 8080 app
 -}
-serve :: (HasWorker api '[]) => Proxy api -> Worker api -> Application
-serve p = serveWithContext p EmptyContext
+serve :: (HasWorker e api '[]) => Proxy e -> Proxy api -> Worker e api -> FetchHandler e
+serve pe p = serveWithContext pe p EmptyContext
 
 {- | Like 'serve', but allows you to pass custom context.
 
@@ -177,30 +177,32 @@ serve p = serveWithContext p EmptyContext
 but if you pass your own formatter, it will override the default one.
 -}
 serveWithContext ::
-  ( HasWorker api context
+  ( HasWorker e api context
   , ServerContext context
   ) =>
+  Proxy e ->
   Proxy api ->
   Context context ->
-  Worker api ->
-  Application
-serveWithContext p context = serveWithContextT p context id
+  Worker e api ->
+  FetchHandler e
+serveWithContext pe p context = serveWithContextT pe p context id
 
 {- | A general 'serve' function that allows you to pass a custom context and hoisting function to
 apply on all routes.
 -}
 serveWithContextT ::
-  forall api context m.
-  (HasWorker api context, ServerContext context) =>
+  forall e api context m.
+  (HasWorker e api context, ServerContext context) =>
+  Proxy e ->
   Proxy api ->
   Context context ->
-  (forall x. m x -> Handler x) ->
-  WorkerT api m ->
-  Application
-serveWithContextT p context toHandler server =
-  toApplication (runRouter format404 (route p context (emptyDelayed router)))
+  (forall x. m x -> Handler e x) ->
+  WorkerT e api m ->
+  FetchHandler e
+serveWithContextT pe p context toHandler server =
+  toFetchHandler (runRouter format404 (route pe p context (emptyDelayed router)))
   where
-    router = Route $ hoistWorkerWithContext p (Proxy :: Proxy context) toHandler server
+    router = Route $ hoistWorkerWithContext pe p (Proxy :: Proxy context) toHandler server
     format404 = notFoundErrorFormatter . getContextEntry . mkContextWithErrorFormatter $ context
 
 {- | Hoist server implementation.
@@ -224,12 +226,13 @@ another. For example
 >>> let mainServer = hoistWorker readerApi nt readerServer :: Worker ReaderAPI
 -}
 hoistWorker ::
-  (HasWorker api '[]) =>
+  (HasWorker e api '[]) =>
+  Proxy e ->
   Proxy api ->
   (forall x. m x -> n x) ->
-  WorkerT api m ->
-  WorkerT api n
-hoistWorker p = hoistWorkerWithContext p (Proxy :: Proxy '[])
+  WorkerT e api m ->
+  WorkerT e api n
+hoistWorker pe p = hoistWorkerWithContext pe p (Proxy :: Proxy '[])
 
 {- | The function 'layout' produces a textual description of the internal
 router layout for debugging purposes. Note that the router layout is
@@ -283,17 +286,18 @@ and below. If there is a success for fatal failure in the first part,
 that one takes precedence. If both parts fail, the \"better\" error
 code will be returned.
 -}
-layout :: (HasWorker api '[]) => Proxy api -> Text
-layout p = layoutWithContext p EmptyContext
+layout :: (HasWorker e api '[]) => Proxy e -> Proxy api -> Text
+layout pe p = layoutWithContext pe p EmptyContext
 
 -- | Variant of 'layout' that takes an additional 'Context'.
 layoutWithContext ::
-  (HasWorker api context) =>
+  (HasWorker e api context) =>
+  Proxy e ->
   Proxy api ->
   Context context ->
   Text
-layoutWithContext p context =
-  routerLayout (route p context (emptyDelayed (FailFatal err501)))
+layoutWithContext pe p context =
+  routerLayout (route pe p context (emptyDelayed (FailFatal err501)))
 
 {- $setup
 >>> :set -XDataKinds
