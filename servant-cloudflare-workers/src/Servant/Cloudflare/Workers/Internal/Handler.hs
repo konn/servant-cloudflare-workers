@@ -21,6 +21,7 @@ import Control.Monad.Error.Class (
 import Control.Monad.IO.Class (
   MonadIO,
  )
+import Control.Monad.Reader.Class (MonadReader)
 import Control.Monad.Trans.Control (
   MonadBaseControl (..),
  )
@@ -28,19 +29,28 @@ import Control.Monad.Trans.Except (
   ExceptT (ExceptT),
   runExceptT,
  )
+import Control.Monad.Trans.Reader (ReaderT (..))
 import Data.String (
   fromString,
  )
 import GHC.Generics (
   Generic,
  )
+import GHC.Wasm.Object.Builtins
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Servant.Cloudflare.Workers.Internal.ServerError (
   ServerError,
   err500,
   errBody,
  )
 
-newtype Handler a = Handler {runHandler' :: ExceptT ServerError IO a}
+data HandlerEnv e = HandlerEnv
+  { bindings :: !(JSObject e)
+  , fetchContext :: !FetchContext
+  }
+  deriving (Generic)
+
+newtype Handler e a = Handler {runHandler' :: ExceptT ServerError (ReaderT (HandlerEnv e) IO) a}
   deriving stock (Generic)
   deriving newtype
     ( Functor
@@ -48,19 +58,20 @@ newtype Handler a = Handler {runHandler' :: ExceptT ServerError IO a}
     , Monad
     , MonadIO
     , MonadError ServerError
+    , MonadReader (HandlerEnv e)
     , MonadThrow
     , MonadCatch
     , MonadMask
     )
 
-instance MonadFail Handler where
+instance MonadFail (Handler e) where
   fail str = throwError err500 {errBody = fromString str}
 
-instance MonadBase IO Handler where
+instance MonadBase IO (Handler e) where
   liftBase = Handler . liftBase
 
-instance MonadBaseControl IO Handler where
-  type StM Handler a = Either ServerError a
+instance MonadBaseControl IO (Handler e) where
+  type StM (Handler e) a = Either ServerError a
 
   -- liftBaseWith :: (RunInBase Handler IO -> IO a) -> Handler a
   liftBaseWith f = Handler (liftBaseWith (\g -> f (g . runHandler')))
@@ -68,14 +79,5 @@ instance MonadBaseControl IO Handler where
   -- restoreM :: StM Handler a -> Handler a
   restoreM st = Handler (restoreM st)
 
-runHandler :: Handler a -> IO (Either ServerError a)
-runHandler = runExceptT . runHandler'
-
-{- | Pattern synonym that matches directly on the inner 'IO' action.
-
-To lift 'IO' actions that don't carry a 'ServerError', use 'Control.Monad.IO.Class.liftIO' instead.
--}
-pattern MkHandler :: IO (Either ServerError a) -> Handler a
-pattern MkHandler ioe = Handler (ExceptT ioe)
-
-{-# COMPLETE MkHandler #-}
+runHandler :: JSObject e -> FetchContext -> Handler e a -> IO (Either ServerError a)
+runHandler bindings fetchContext = flip runReaderT HandlerEnv {..} . runExceptT . runHandler'

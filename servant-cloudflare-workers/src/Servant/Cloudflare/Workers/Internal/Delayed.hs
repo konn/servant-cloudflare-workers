@@ -19,6 +19,8 @@ import Control.Monad.Trans.Resource (
   ResourceT,
   runResourceT,
  )
+import GHC.Wasm.Object.Builtins
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Servant.Cloudflare.Workers.Internal.DelayedIO
 import Servant.Cloudflare.Workers.Internal.Handler
@@ -269,20 +271,22 @@ Also takes a continuation for how to turn the
 result of the delayed server into a response.
 -}
 runAction ::
-  Delayed env (Handler a) ->
+  Delayed env (Handler e a) ->
   env ->
   WorkerRequest ->
+  JSObject e ->
+  FetchContext ->
   (RouteResult PartialResponse -> IO r) ->
   (a -> RouteResult PartialResponse) ->
   IO r
-runAction action env req respond k =
+runAction action env req bind fenv respond k =
   runResourceT $
     runDelayed action env req >>= go >>= liftIO . respond
   where
     go (Fail e) = return $ Fail e
     go (FailFatal e) = return $ FailFatal e
     go (Route a) = liftIO $ do
-      e <- runHandler a
+      e <- runHandler bind fenv a
       case e of
         Left err -> pure $ Route $ responseServerError err
         Right x -> return $! k x

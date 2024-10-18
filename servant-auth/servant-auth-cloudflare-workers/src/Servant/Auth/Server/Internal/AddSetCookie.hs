@@ -108,11 +108,11 @@ instance
 instance
   {-# OVERLAPS #-}
   ( AddSetCookies ('S n) (ServerT (ToServantApi api) m) cookiedApi
-  , Generic (api (AsServerT m))
-  , GServantProduct (Rep (api (AsServerT m)))
-  , ToServant api (AsServerT m) ~ ServerT (ToServantApi api) m
+  , Generic (api (AsWorkerT m))
+  , GServantProduct (Rep (api (AsWorkerT m)))
+  , ToServant api (AsWorkerT m) ~ ServerT (ToServantApi api) m
   ) =>
-  AddSetCookies ('S n) (api (AsServerT m)) cookiedApi
+  AddSetCookies ('S n) (api (AsWorkerT m)) cookiedApi
   where
   addSetCookies cookies = addSetCookies cookies . toServant
 

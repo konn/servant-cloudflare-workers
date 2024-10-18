@@ -7,8 +7,8 @@
 
 -- | @since 0.14.1
 module Servant.Cloudflare.Workers.Generic (
-  AsServerT,
-  AsServer,
+  AsWorkerT,
+  AsWorker,
   genericServe,
   genericServeT,
   genericServeTWithContext,
@@ -30,10 +30,10 @@ import Servant.Cloudflare.Workers.Internal
 genericServe ::
   forall routes.
   ( HasWorker (ToServantApi routes) '[]
-  , GenericServant routes AsServer
-  , Worker (ToServantApi routes) ~ ToServant routes AsServer
+  , GenericServant routes AsWorker
+  , Worker (ToServantApi routes) ~ ToServant routes AsWorker
   ) =>
-  routes AsServer ->
+  routes AsWorker ->
   Application
 genericServe = serve (Proxy :: Proxy (ToServantApi routes)) . genericServer
 
@@ -43,15 +43,15 @@ genericServe = serve (Proxy :: Proxy (ToServantApi routes)) . genericServer
 -}
 genericServeT ::
   forall (routes :: Type -> Type) (m :: Type -> Type).
-  ( GenericServant routes (AsServerT m)
+  ( GenericServant routes (AsWorkerT m)
   , GenericServant routes AsApi
   , HasWorker (ToServantApi routes) '[]
-  , WorkerT (ToServantApi routes) m ~ ToServant routes (AsServerT m)
+  , WorkerT (ToServantApi routes) m ~ ToServant routes (AsWorkerT m)
   ) =>
   -- | 'hoistWorker' argument to come back to 'Handler'
   (forall a. m a -> Handler a) ->
   -- | your record full of request handlers
-  routes (AsServerT m) ->
+  routes (AsWorkerT m) ->
   Application
 genericServeT f server = serve p $ hoistWorker p f (genericServerT server)
   where
@@ -64,16 +64,16 @@ genericServeT f server = serve p $ hoistWorker p f (genericServerT server)
 -}
 genericServeTWithContext ::
   forall (routes :: Type -> Type) (m :: Type -> Type) (ctx :: [Type]).
-  ( GenericServant routes (AsServerT m)
+  ( GenericServant routes (AsWorkerT m)
   , GenericServant routes AsApi
   , HasWorker (ToServantApi routes) ctx
   , HasContextEntry (ctx .++ DefaultErrorFormatters) ErrorFormatters
-  , WorkerT (ToServantApi routes) m ~ ToServant routes (AsServerT m)
+  , WorkerT (ToServantApi routes) m ~ ToServant routes (AsWorkerT m)
   ) =>
   -- | 'hoistWorker' argument to come back to 'Handler'
   (forall a. m a -> Handler a) ->
   -- | your record full of request handlers
-  routes (AsServerT m) ->
+  routes (AsWorkerT m) ->
   -- | the 'Context' to serve the application with
   Context ctx ->
   Application
@@ -86,9 +86,9 @@ genericServeTWithContext f server ctx =
 
 -- | Transform a record of endpoints into a 'Worker'.
 genericServer ::
-  (GenericServant routes AsServer) =>
-  routes AsServer ->
-  ToServant routes AsServer
+  (GenericServant routes AsWorker) =>
+  routes AsWorker ->
+  ToServant routes AsWorker
 genericServer = toServant
 
 {- | Transform a record of endpoints into a @'WorkerT' m@.
@@ -97,7 +97,7 @@ genericServer = toServant
  <https://docs.servant.dev/en/stable/cookbook/generic/Generic.html#using-generics-together-with-a-custom-monad in the Servant Cookbook>.
 -}
 genericServerT ::
-  (GenericServant routes (AsServerT m)) =>
-  routes (AsServerT m) ->
-  ToServant routes (AsServerT m)
+  (GenericServant routes (AsWorkerT m)) =>
+  routes (AsWorkerT m) ->
+  ToServant routes (AsWorkerT m)
 genericServerT = toServant

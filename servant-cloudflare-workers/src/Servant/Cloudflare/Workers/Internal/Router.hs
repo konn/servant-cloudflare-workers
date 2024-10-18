@@ -29,7 +29,7 @@ import Servant.Cloudflare.Workers.Internal.RouteResult
 import Servant.Cloudflare.Workers.Internal.RoutingApplication
 import Servant.Cloudflare.Workers.Internal.ServerError
 
-type Router env = Router' env RoutingApplication
+type Router b env = Router' env (RoutingApplication b)
 
 -- | Holds information about pieces of url that are captured as variables.
 data CaptureHint = CaptureHint
@@ -187,25 +187,25 @@ routerLayout router =
     mkSubTree False path children = ("└─ " <> path <> "/") : map ("   " <>) children
 
 -- | Apply a transformation to the response of a `Router`.
-tweakResponse :: (RouteResult PartialResponse -> RouteResult PartialResponse) -> Router env -> Router env
-tweakResponse f = fmap (\a -> \req c cont -> a req c (cont . f))
+tweakResponse :: (RouteResult PartialResponse -> RouteResult PartialResponse) -> Router b env -> Router b env
+tweakResponse f = fmap (\a -> \req b c cont -> a req b c (cont . f))
 
 -- | Interpret a router as an application.
-runRouter :: NotFoundErrorFormatter -> Router () -> RoutingApplication
+runRouter :: NotFoundErrorFormatter -> Router b () -> RoutingApplication b
 runRouter fmt r = runRouterEnv fmt r ()
 
-runRouterEnv :: NotFoundErrorFormatter -> Router env -> env -> RoutingApplication
-runRouterEnv fmt router env request ctx respond =
+runRouterEnv :: NotFoundErrorFormatter -> Router b env -> env -> RoutingApplication b
+runRouterEnv fmt router env request b ctx respond =
   case router of
     StaticRouter table ls ->
       case pathInfo request of
-        [] -> runChoice fmt ls env request ctx respond
+        [] -> runChoice fmt ls env request b ctx respond
         -- This case is to handle trailing slashes.
-        [""] -> runChoice fmt ls env request ctx respond
+        [""] -> runChoice fmt ls env request b ctx respond
         first : rest
           | Just router' <- M.lookup first table ->
               let request' = request {pathInfo = rest}
-               in runRouterEnv fmt router' env request' ctx respond
+               in runRouterEnv fmt router' env request' b ctx respond
         _ -> respond $ Fail $ fmt request.rawRequest
     CaptureRouter _ router' ->
       case pathInfo request of
@@ -214,33 +214,33 @@ runRouterEnv fmt router env request ctx respond =
         [""] -> respond $ Fail $ fmt request.rawRequest
         first : rest ->
           let request' = request {pathInfo = rest}
-           in runRouterEnv fmt router' (first, env) request' ctx respond
+           in runRouterEnv fmt router' (first, env) request' b ctx respond
     CaptureAllRouter _ router' ->
       let segments = case pathInfo request of
             -- this case is to handle trailing slashes.
             ("" : xs) -> xs
             xs -> xs
           request' = request {pathInfo = []}
-       in runRouterEnv fmt router' (segments, env) request' ctx respond
+       in runRouterEnv fmt router' (segments, env) request' b ctx respond
     RawRouter app ->
-      app env request ctx respond
+      app env request b ctx respond
     Choice r1 r2 ->
-      runChoice fmt [runRouterEnv fmt r1, runRouterEnv fmt r2] env request ctx respond
+      runChoice fmt [runRouterEnv fmt r1, runRouterEnv fmt r2] env request b ctx respond
 
 {- | Try a list of routing applications in order.
 We stop as soon as one fails fatally or succeeds.
 If all fail normally, we pick the "best" error.
 -}
-runChoice :: NotFoundErrorFormatter -> [env -> RoutingApplication] -> env -> RoutingApplication
+runChoice :: NotFoundErrorFormatter -> [env -> RoutingApplication b] -> env -> RoutingApplication b
 runChoice fmt ls =
   case ls of
-    [] -> \_ request _ respond -> respond $ Fail $ fmt $ rawRequest request
+    [] -> \_ request _ _ respond -> respond $ Fail $ fmt $ rawRequest request
     [r] -> r
     (r : rs) ->
-      \env request e respond ->
-        r env request e $ \response1 ->
+      \env request b e respond ->
+        r env request b e $ \response1 ->
           case response1 of
-            Fail _ -> runChoice fmt rs env request e $ \response2 ->
+            Fail _ -> runChoice fmt rs env request b e $ \response2 ->
               respond $ highestPri response1 response2
             _ -> respond response1
   where
