@@ -1,56 +1,15 @@
 packages:
-  servant/
   servant-client-core/
   servant-client/
   servant-server/
 
   servant-auth/servant-auth
   servant-auth/servant-auth-client
-  servant-auth/servant-auth-docs
   servant-auth/servant-auth-server
-  servant-auth/servant-auth-swagger
-  servant-docs/
-  servant-foreign/
-  servant-http-streams/
-  servant-quickcheck/
-  servant-swagger/
-
-  doc/tutorial/
-
--- servant streaming
-packages:
-  servant-machines/
-  servant-conduit/
-  servant-pipes/
 
 -- servant GHCJS
 -- packages:
 --   servant-jsaddle/
-
--- Cookbooks
-packages:
-  doc/cookbook/basic-auth
-  doc/cookbook/curl-mock
-  doc/cookbook/custom-errors
-  doc/cookbook/basic-streaming
-  doc/cookbook/db-postgres-pool
-  doc/cookbook/db-sqlite-simple
-  doc/cookbook/file-upload
-  doc/cookbook/generic
-  doc/cookbook/hoist-server-with-context
-  doc/cookbook/https
-  doc/cookbook/jwt-and-basic-auth
-  doc/cookbook/pagination
-  -- doc/cookbook/sentry
-  -- Commented out because servant-quickcheck currently doesn't build.
-  -- doc/cookbook/testing
-  doc/cookbook/uverb
-  doc/cookbook/structuring-apis
-  doc/cookbook/using-custom-monad
-  doc/cookbook/using-free-client
-  -- doc/cookbook/open-id-connect
-  doc/cookbook/managed-resource
-  doc/cookbook/openapi3
 
 tests: True
 optimization: False
