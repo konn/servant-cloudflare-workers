@@ -41,7 +41,7 @@ bench() {
   echo "\e[36m=== $1 ===\e[0m"
 }
 
-# Server
+# Worker
 #######################################################################
 
 ## Machines
@@ -216,7 +216,7 @@ rm -f bench.md
 header "#" "Streaming test benchmark"
 note "size parameter: $SIZE"
 
-header "##" Server
+header "##" Worker
 
 note "- /fast/$SIZE\n- /proxy"
 

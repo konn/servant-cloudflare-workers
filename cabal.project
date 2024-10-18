@@ -1,11 +1,11 @@
-packages:
-  servant-client-core/
-  servant-client/
-  servant-server/
+import: cabal-common.project
+semaphore: True
 
-  servant-auth/servant-auth
+packages:
+  servant-cloudflare-workers/
+
   servant-auth/servant-auth-client
-  servant-auth/servant-auth-server
+  -- servant-auth/servant-auth-cloudflare-workers
 
 -- servant GHCJS
 -- packages:

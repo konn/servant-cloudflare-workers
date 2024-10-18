@@ -1,0 +1,46 @@
+constraints:
+  servant ==0.20.2
+
+allow-newer:
+  base,
+  bytestring,
+  containers,
+  deepseq,
+  filepath,
+  ghc-prim,
+  template-haskell,
+  text,
+  time
+
+source-repository-package
+  type: git
+  location: https://github.com/deepflowinc/effectful-extras
+  tag: 11fec60ba00e63beb12cd57a96396ca84bc6d3e7
+  subdir:
+    streaming-effectful
+    streaming-http-effectful
+    effectful-lens
+    path-tagged-effectful
+    random-effectful
+    time-effectful
+    log-effectful-extra
+
+source-repository-package
+  type: git
+  location: https://github.com/deepflowinc/streaming-extras
+  tag: d651e6f0c65c764155a778780cf2770f28ae23de
+  subdir:
+    streaming-SHA
+    streaming-http
+
+source-repository-package
+  type: git
+  location: https://github.com/konn/ghc-wasm-earthly
+  tag: 1185a7e07b64cbe89f9959e7b32391ace63abfc9
+  subdir:
+    cloudflare-worker
+    ghc-wasm-jsobjects
+    ghc-wasm-compat
+    wasm-linear-base
+    web-sys-hs
+    steward-core
