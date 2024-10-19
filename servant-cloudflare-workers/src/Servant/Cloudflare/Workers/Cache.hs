@@ -14,7 +14,6 @@ module Servant.Cloudflare.Workers.Cache (
   CacheKeyRequest (..),
 ) where
 
-import Control.Exception (SomeException, try)
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (MonadReader (..))
