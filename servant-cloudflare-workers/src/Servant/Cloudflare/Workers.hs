@@ -16,6 +16,9 @@ module Servant.Cloudflare.Workers (
   serveWithContext,
   serveWithContextT,
   ServerContext,
+  JSHandlers,
+  JSObject (..),
+  compileWorker,
 
   -- * Construct a wai Application from an API
   toFetchHandler,
@@ -131,6 +134,7 @@ import Data.Tagged (
 import Data.Text (
   Text,
  )
+import Network.Cloudflare.Worker.Handler
 import Network.Cloudflare.Worker.Handler.Fetch
 import Servant.Cloudflare.Workers.Internal
 import Servant.Cloudflare.Workers.UVerb
@@ -146,6 +150,9 @@ need to worry about these constraints, but if you write a helper function that w
 type ServerContext context =
   ( HasContextEntry (context .++ DefaultErrorFormatters) ErrorFormatters
   )
+
+compileWorker :: FetchHandler e -> IO JSHandlers
+compileWorker fetch = toJSHandlers Handlers {fetch}
 
 {- | 'serve' allows you to implement an API and produce a wai 'Application'.
 

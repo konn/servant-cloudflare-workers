@@ -6,6 +6,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
+module Main (handlers, main) where
+
 import Data.Aeson
 import Data.Proxy
 import Data.Text
@@ -66,6 +68,7 @@ server = helloH :<|> postGreetH :<|> deleteGreetH :<|> otherRoutes
     bye name = pure $ "Bye, " <> name <> " !"
     version = pure 42
 
+    helloH :: Text -> Maybe Bool -> Handler e Greet
     helloH name Nothing = helloH name (Just False)
     helloH name (Just False) = return . Greet $ "Hello, " <> name
     helloH name (Just True) = return . Greet . toUpper $ "Hello, " <> name
@@ -76,8 +79,10 @@ server = helloH :<|> postGreetH :<|> deleteGreetH :<|> otherRoutes
 
 -- Turn the server into a WAI app. 'serve' is provided by servant,
 -- more precisely by the Servant.Cloudflare.Workers module.
-test :: FetchHandler e
-test = serve Proxy testApi server
+handlers :: IO JSHandlers
+handlers = compileWorker $ serve Proxy testApi server
+
+foreign export javascript "handlers" handlers :: IO JSHandlers
 
 -- Put this all to work!
 main :: IO ()

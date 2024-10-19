@@ -4,7 +4,7 @@ semaphore: True
 packages:
   servant-cloudflare-workers/
 
-  servant-auth/servant-auth-client
+  -- servant-auth/servant-auth-client
   -- servant-auth/servant-auth-cloudflare-workers
 
 -- servant GHCJS

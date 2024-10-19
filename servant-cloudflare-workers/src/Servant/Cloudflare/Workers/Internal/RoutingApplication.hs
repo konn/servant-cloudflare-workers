@@ -9,7 +9,7 @@ import Network.Cloudflare.Worker.Handler.Fetch (FetchContext, FetchHandler)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import qualified Network.Cloudflare.Worker.Request as Req
 import Network.Cloudflare.Worker.Response (WorkerResponse)
-import Network.HTTP.Types.URI (decodePathSegments, extractPath)
+import Network.HTTP.Types.URI (decodePath, extractPath)
 import Servant.Cloudflare.Workers.Internal.Response
 import Servant.Cloudflare.Workers.Internal.RouteResult
 import Servant.Cloudflare.Workers.Internal.ServerError
@@ -27,7 +27,12 @@ type RoutingApplication e =
 
 toFetchHandler :: RoutingApplication e -> FetchHandler e
 toFetchHandler ra rawRequest env ctx =
-  let pathInfo = decodePathSegments $ extractPath $ TE.encodeUtf8 $ Req.getUrl rawRequest
+  let pathInfo =
+        fst $
+          decodePath $
+            extractPath $
+              TE.encodeUtf8 $
+                Req.getUrl rawRequest
       req0 = RoutingRequest {..}
    in ra req0 env ctx routingRespond
   where

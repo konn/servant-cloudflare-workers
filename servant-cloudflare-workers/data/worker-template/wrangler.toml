@@ -1,0 +1,7 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "greet"
+main = "src/worker.js"
+compatibility_date = "2024-09-19"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
