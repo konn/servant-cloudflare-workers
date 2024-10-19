@@ -9,10 +9,12 @@
 module Main (handlers, main) where
 
 import Data.Aeson
+import Data.Maybe (fromMaybe)
 import Data.Proxy
 import Data.Text
 import GHC.Generics
 import Prelude.Compat
+import Servant.Cloudflare.Workers.Cache (CacheOptions (..), serveCached)
 import Servant.Cloudflare.Workers.Generic ()
 import Servant.Cloudflare.Workers.Prelude
 import Prelude ()
@@ -64,14 +66,17 @@ server :: Worker e TestApi
 server = helloH :<|> postGreetH :<|> deleteGreetH :<|> otherRoutes
   where
     otherRoutes = OtherRoutes {..}
+    cacheOpts = CacheOptions {cacheTTL = 60, onlyOk = True, includeQuery = True}
 
     bye name = pure $ "Bye, " <> name <> " !"
-    version = pure 42
+    version = serveCached cacheOpts $ pure 42
 
     helloH :: Text -> Maybe Bool -> Handler e Greet
-    helloH name Nothing = helloH name (Just False)
-    helloH name (Just False) = return . Greet $ "Hello, " <> name
-    helloH name (Just True) = return . Greet . toUpper $ "Hello, " <> name
+    helloH name mcapital =
+      serveCached cacheOpts
+        $ if fromMaybe False mcapital
+          then return . Greet . toUpper $ "Hello, " <> name
+          else return . Greet $ "Hello, " <> name
 
     postGreetH greet = return greet
 

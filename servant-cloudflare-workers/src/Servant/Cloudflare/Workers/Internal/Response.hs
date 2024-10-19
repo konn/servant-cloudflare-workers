@@ -2,7 +2,9 @@
 
 module Servant.Cloudflare.Workers.Internal.Response (
   PartialResponse (..),
+  RoutingResponse (..),
   toWorkerResponse,
+  fromPartialResponse,
   responseLBS,
 ) where
 
@@ -21,6 +23,11 @@ import qualified Network.Cloudflare.Worker.Response as Resp
 import Network.HTTP.Types
 import qualified Wasm.Prelude.Linear as PL
 
+data RoutingResponse
+  = RawResponse WorkerResponse
+  | RouteResponse PartialResponse
+  deriving (Generic)
+
 data PartialResponse = PartialResponse
   { body :: !(Maybe WorkerResponseBody)
   , status :: !Status
@@ -30,8 +37,12 @@ data PartialResponse = PartialResponse
   }
   deriving (Generic)
 
-toWorkerResponse :: PartialResponse -> IO WorkerResponse
-toWorkerResponse PartialResponse {..} = do
+toWorkerResponse :: RoutingResponse -> IO WorkerResponse
+toWorkerResponse (RawResponse w) = pure w
+toWorkerResponse (RouteResponse r) = fromPartialResponse r
+
+fromPartialResponse :: PartialResponse -> IO WorkerResponse
+fromPartialResponse PartialResponse {..} = do
   mbody <- mapM fromWorkerResponseBody body
   hdrs <- Resp.toHeaders $ Map.mapKeys CI.original $ Map.fromList headers
   encode <- maybe (fromHaskellByteString "automatic") fromHaskellByteString encodeBody
@@ -51,14 +62,15 @@ responseLBS ::
   Status ->
   [(HeaderName, BS.StrictByteString)] ->
   LBS.ByteString ->
-  PartialResponse
+  RoutingResponse
 responseLBS status headers bdy =
-  PartialResponse
-    { status = status
-    , headers
-    , encodeBody = Nothing
-    , cloudflare = Nothing
-    , body = do
-        guard $ not $ LBS.null bdy
-        Just $ WorkerResponseLBS bdy
-    }
+  RouteResponse
+    PartialResponse
+      { status = status
+      , headers
+      , encodeBody = Nothing
+      , cloudflare = Nothing
+      , body = do
+          guard $ not $ LBS.null bdy
+          Just $ WorkerResponseLBS bdy
+      }

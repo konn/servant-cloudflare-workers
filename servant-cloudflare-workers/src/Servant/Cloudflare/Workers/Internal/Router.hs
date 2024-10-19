@@ -187,7 +187,7 @@ routerLayout router =
     mkSubTree False path children = ("└─ " <> path <> "/") : map ("   " <>) children
 
 -- | Apply a transformation to the response of a `Router`.
-tweakResponse :: (RouteResult PartialResponse -> RouteResult PartialResponse) -> Router b env -> Router b env
+tweakResponse :: (RouteResult RoutingResponse -> RouteResult RoutingResponse) -> Router b env -> Router b env
 tweakResponse f = fmap (\a -> \req b c cont -> a req b c (cont . f))
 
 -- | Interpret a router as an application.

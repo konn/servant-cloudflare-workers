@@ -27,6 +27,7 @@ import Control.Monad.Trans.Control (
   defaultLiftBaseWith,
   defaultRestoreM,
  )
+import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.Cloudflare.Workers.Internal.ServerError
 
 -- | The result of matching against a path in the route tree.
@@ -37,7 +38,8 @@ data RouteResult a
   | -- | Don't try other paths.
     FailFatal !ServerError
   | Route !a
-  deriving (Eq, Show, Read, Functor)
+  | FastReturn WorkerResponse
+  deriving (Functor)
 
 instance Applicative RouteResult where
   pure = Route
@@ -48,6 +50,7 @@ instance Monad RouteResult where
   Route a >>= f = f a
   Fail e >>= _ = Fail e
   FailFatal e >>= _ = FailFatal e
+  FastReturn r >>= _ = FastReturn r
 
 newtype RouteResultT m a = RouteResultT {runRouteResultT :: m (RouteResult a)}
   deriving (Functor)
@@ -64,6 +67,7 @@ instance (Monad m) => Monad (RouteResultT m) where
   m >>= k = RouteResultT $ do
     a <- runRouteResultT m
     case a of
+      FastReturn r -> return $ FastReturn r
       Fail e -> return $ Fail e
       FailFatal e -> return $ FailFatal e
       Route b -> runRouteResultT (k b)

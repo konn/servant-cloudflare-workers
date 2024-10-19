@@ -46,6 +46,7 @@ import Data.Maybe (
   mapMaybe,
   maybeToList,
  )
+import Data.Monoid (Ap (..))
 import Data.String (
   IsString (..),
  )
@@ -351,7 +352,7 @@ fromJSBS :: JSByteString -> B.ByteString
 fromJSBS = unsafePerformIO . toHaskellByteString
 
 requestMethod :: RoutingRequest -> BC8.ByteString
-requestMethod = fromJSBS . Req.getMethod . rawRequest
+requestMethod = fromJSBS . Req.getMethod . (.rawRequest)
 
 allowedMethodHead :: Method -> RoutingRequest -> Bool
 allowedMethodHead method request = method == methodGet && requestMethod request == methodHead
@@ -534,15 +535,16 @@ streamRouter splitHeaders method status _ ctypeproxy action = leafRouter $ \env 
           let (headers, fa) = splitHeaders output
            in Route $ responseStream status (contentHeader : headers) (toReadableStream' fa)
 
-responseStream :: Status -> [(HeaderName, BC8.ByteString)] -> RS.ReadableStream -> PartialResponse
+responseStream :: Status -> [(HeaderName, BC8.ByteString)] -> RS.ReadableStream -> RoutingResponse
 responseStream stt hdrs str =
-  PartialResponse
-    { status = stt
-    , headers = hdrs
-    , encodeBody = Nothing
-    , cloudflare = Nothing
-    , body = Just $ WorkerResponseStream str
-    }
+  RouteResponse
+    PartialResponse
+      { status = stt
+      , headers = hdrs
+      , encodeBody = Nothing
+      , cloudflare = Nothing
+      , body = Just $ WorkerResponseStream str
+      }
 
 {- | If you use 'Header' in one of the endpoints for your API,
 this automatically requires your server-side handler to be a function
@@ -926,6 +928,7 @@ instance HasWorker e Raw context where
     liftIO $ go r request wenv fctx respond
     where
       go r request wenv fctx respond = case r of
+        FastReturn rsp -> pure rsp
         Route app -> untag app request.rawRequest wenv fctx
         Fail a -> respond $ Fail a
         FailFatal e -> respond $ FailFatal e
@@ -945,7 +948,7 @@ instance HasWorker e RawM context where
       RoutingRequest ->
       JSObject e ->
       FetchContext ->
-      (RouteResult PartialResponse -> IO WorkerResponse) ->
+      (RouteResult RoutingResponse -> IO WorkerResponse) ->
       m WorkerResponse
 
   route _ _ _ handleDelayed = RawRouter $ \env request wenv fctx respond -> runResourceT $ do
@@ -953,14 +956,16 @@ instance HasWorker e RawM context where
     let respond' = liftIO . respond
     liftIO $ case routeResult of
       Route handler ->
-        runHandler wenv fctx (handler request wenv fctx respond)
+        runHandler request.rawRequest wenv fctx (handler request wenv fctx respond)
           >>= \case
-            Left e -> respond' $ FailFatal e
-            Right a -> pure a
+            Left (Error e) -> respond' $ FailFatal e
+            Left (Response r) -> toWorkerResponse r
+            Right (rsp, final) -> rsp <$ liftIO (getAp $ final rsp)
       {- runHandler (handler request.rawRequest fctx)
         -}
       Fail e -> respond' $ Fail e
       FailFatal e -> respond' $ FailFatal e
+      FastReturn r -> pure r
 
   hoistWorkerWithContext _ _ _ f srvM = \req b fctx respond -> f (srvM req b fctx respond)
 

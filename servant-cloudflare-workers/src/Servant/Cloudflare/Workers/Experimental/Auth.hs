@@ -42,6 +42,10 @@ import Servant.Cloudflare.Workers.Internal (
   runHandler,
   withRequest,
  )
+import Servant.Cloudflare.Workers.Internal.DelayedIO (liftRouteResult)
+import Servant.Cloudflare.Workers.Internal.Handler (Finaliser, ServerReturn (..))
+import Servant.Cloudflare.Workers.Internal.Response (toWorkerResponse)
+import Servant.Cloudflare.Workers.Internal.RouteResult (RouteResult (..))
 import Servant.Cloudflare.Workers.Prelude (
   (:>),
  )
@@ -76,7 +80,7 @@ instance
   where
   type
     WorkerT e (AuthProtect tag :> api) m =
-      AuthServerData (AuthProtect tag) -> WorkerT e api m
+      (AuthServerData (AuthProtect tag), Finaliser) -> WorkerT e api m
 
   hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
 
@@ -85,5 +89,10 @@ instance
     where
       authHandler = unAuthHandler (getContextEntry context)
       authCheck req wenv fctx =
-        liftIO (runHandler wenv fctx $ authHandler req)
-          >>= either delayedFailFatal return
+        liftIO (runHandler req wenv fctx $ authHandler req)
+          >>= either
+            ( \case
+                Error err -> delayedFailFatal err
+                Response p -> liftRouteResult . FastReturn =<< liftIO (toWorkerResponse p)
+            )
+            return

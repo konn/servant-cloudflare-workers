@@ -70,7 +70,7 @@ instance MonadBaseControl IO (DelayedIO e) where
   restoreM = DelayedIO . lift . withInternalState . const . restoreM
 
 runDelayedIO :: DelayedIO e a -> WorkerRequest -> JSObject e -> FetchContext -> ResourceT IO (RouteResult a)
-runDelayedIO m req bindings fetchContext = transResourceT runRouteResultT $ runReaderT (runDelayedIO' m) (HandlerEnv {..}, req)
+runDelayedIO m rawRequest bindings fetchContext = transResourceT runRouteResultT $ runReaderT (runDelayedIO' m) (HandlerEnv {..}, rawRequest)
 
 -- | Fail with the option to recover.
 delayedFail :: ServerError -> DelayedIO e a

@@ -19,6 +19,7 @@ import Control.Monad.Trans.Resource (
   ResourceT,
   runResourceT,
  )
+import Data.Monoid (Ap (..))
 import GHC.Wasm.Object.Builtins
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
@@ -26,7 +27,7 @@ import Servant.Cloudflare.Workers.Internal.DelayedIO
 import Servant.Cloudflare.Workers.Internal.Handler
 import Servant.Cloudflare.Workers.Internal.Response
 import Servant.Cloudflare.Workers.Internal.RouteResult
-import Servant.Cloudflare.Workers.Internal.ServerError
+import Servant.Cloudflare.Workers.Internal.ServerError (responseServerError)
 
 {- | A 'Delayed' is a representation of a handler with scheduled
 delayed checks that can trigger errors.
@@ -278,20 +279,31 @@ runAction ::
   WorkerRequest ->
   JSObject e ->
   FetchContext ->
-  (RouteResult PartialResponse -> IO r) ->
-  (a -> RouteResult PartialResponse) ->
+  (RouteResult RoutingResponse -> IO r) ->
+  (a -> RouteResult RoutingResponse) ->
   IO r
 runAction action env req bind fenv respond k =
   runResourceT $
-    runDelayed action env req bind fenv >>= go >>= liftIO . respond
+    runDelayed action env req bind fenv >>= go
   where
-    go (Fail e) = return $ Fail e
-    go (FailFatal e) = return $ FailFatal e
+    go (Fail e) = liftIO $ respond $ Fail e
+    go (FailFatal e) = liftIO $ respond $ FailFatal e
+    go (FastReturn rsp) = liftIO $ respond $ Route $ RawResponse rsp
     go (Route a) = liftIO $ do
-      e <- runHandler bind fenv a
+      e <- runHandler req bind fenv a
       case e of
-        Left err -> pure $ Route $ responseServerError err
-        Right x -> return $! k x
+        Left err ->
+          liftIO . respond . Route . RawResponse
+            =<< responseServerReturn err
+        Right (x, (getAp .) -> fin) -> liftIO . respond' $ k x
+          where
+            respond' resl = do
+              case resl of
+                FastReturn r -> fin r
+                Fail err -> fin =<< toWorkerResponse (responseServerError err)
+                FailFatal err -> fin =<< toWorkerResponse (responseServerError err)
+                Route res -> fin =<< toWorkerResponse res
+              respond resl
 
 {- Note [Existential Record Update]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

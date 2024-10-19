@@ -10,9 +10,6 @@ import Control.Exception (
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Data.Typeable (
-  Typeable,
- )
 import Network.Cloudflare.Worker.Response (
   WorkerResponseBody (..),
  )
@@ -25,23 +22,24 @@ data ServerError = ServerError
   , errBody :: LBS.ByteString
   , errHeaders :: [HTTP.Header]
   }
-  deriving (Show, Eq, Read, Typeable)
+  deriving (Show, Eq, Read)
 
 instance Exception ServerError
 
-responseServerError :: ServerError -> PartialResponse
+responseServerError :: ServerError -> RoutingResponse
 responseServerError ServerError {..} =
-  PartialResponse
-    { body = Just $ WorkerResponseLBS errBody
-    , headers = errHeaders
-    , status =
-        HTTP.Status
-          { statusCode = errHTTPCode
-          , statusMessage = TE.encodeUtf8 $ T.pack errReasonPhrase
-          }
-    , cloudflare = Nothing
-    , encodeBody = Nothing
-    }
+  RouteResponse
+    PartialResponse
+      { body = Just $ WorkerResponseLBS errBody
+      , headers = errHeaders
+      , status =
+          HTTP.Status
+            { statusCode = errHTTPCode
+            , statusMessage = TE.encodeUtf8 $ T.pack errReasonPhrase
+            }
+      , cloudflare = Nothing
+      , encodeBody = Nothing
+      }
 
 {- | 'err300' Multiple Choices
 

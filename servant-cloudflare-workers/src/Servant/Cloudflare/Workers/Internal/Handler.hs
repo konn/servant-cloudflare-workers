@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RequiredTypeArguments #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Servant.Cloudflare.Workers.Internal.Handler where
@@ -21,57 +22,86 @@ import Control.Monad.Error.Class (
 import Control.Monad.IO.Class (
   MonadIO,
  )
-import Control.Monad.Reader.Class (MonadReader)
+import Control.Monad.Reader.Class (MonadReader, asks)
 import Control.Monad.Trans.Control (
   MonadBaseControl (..),
  )
 import Control.Monad.Trans.Except (
-  ExceptT (ExceptT),
+  ExceptT (..),
   runExceptT,
  )
 import Control.Monad.Trans.Reader (ReaderT (..))
+import Control.Monad.Trans.Writer.Strict (WriterT, runWriterT, tell)
+import qualified Data.Aeson as J
+import Data.Monoid (Ap (..))
 import Data.String (
   fromString,
  )
+import qualified Data.Text as T
 import GHC.Generics (
   Generic,
  )
+import GHC.TypeLits (KnownSymbol)
 import GHC.Wasm.Object.Builtins
+import Network.Cloudflare.Worker.Binding (BindingsClass, ListMember)
+import qualified Network.Cloudflare.Worker.Binding as Bindings
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
+import Network.Cloudflare.Worker.Request (WorkerRequest)
+import Network.Cloudflare.Worker.Response (WorkerResponse)
+import Servant.Cloudflare.Workers.Internal.Response
 import Servant.Cloudflare.Workers.Internal.ServerError (
   ServerError,
   err500,
   errBody,
+  responseServerError,
  )
 
 data HandlerEnv e = HandlerEnv
   { bindings :: !(JSObject e)
   , fetchContext :: !FetchContext
+  , rawRequest :: !WorkerRequest
   }
   deriving (Generic)
 
-newtype Handler e a = Handler {runHandler' :: ExceptT ServerError (ReaderT (HandlerEnv e) IO) a}
+type Finaliser = WorkerResponse -> Ap IO ()
+
+newtype Handler e a = Handler {runHandler' :: WriterT Finaliser (ExceptT ServerReturn (ReaderT (HandlerEnv e) IO)) a}
   deriving stock (Generic)
   deriving newtype
     ( Functor
     , Applicative
     , Monad
     , MonadIO
-    , MonadError ServerError
+    , MonadError ServerReturn
     , MonadReader (HandlerEnv e)
     , MonadThrow
     , MonadCatch
     , MonadMask
     )
 
+data ServerReturn
+  = Error ServerError
+  | Response RoutingResponse
+  deriving (Generic)
+
+responseServerReturn :: ServerReturn -> IO WorkerResponse
+responseServerReturn (Error err) =
+  toWorkerResponse $ responseServerError err
+responseServerReturn (Response rsp) =
+  toWorkerResponse rsp
+
+instance Show ServerReturn where
+  showsPrec d (Error e) = showParen (d > 10) $ showString "Error " . showsPrec 11 e
+  showsPrec d (Response _) = showParen (d > 10) $ showString "Response (..)"
+
 instance MonadFail (Handler e) where
-  fail str = throwError err500 {errBody = fromString str}
+  fail str = throwError $ Error err500 {errBody = fromString str}
 
 instance MonadBase IO (Handler e) where
   liftBase = Handler . liftBase
 
 instance MonadBaseControl IO (Handler e) where
-  type StM (Handler e) a = Either ServerError a
+  type StM (Handler e) a = Either ServerReturn (a, WorkerResponse -> Ap IO ())
 
   -- liftBaseWith :: (RunInBase Handler IO -> IO a) -> Handler a
   liftBaseWith f = Handler (liftBaseWith (\g -> f (g . runHandler')))
@@ -79,5 +109,35 @@ instance MonadBaseControl IO (Handler e) where
   -- restoreM :: StM Handler a -> Handler a
   restoreM st = Handler (restoreM st)
 
-runHandler :: JSObject e -> FetchContext -> Handler e a -> IO (Either ServerError a)
-runHandler bindings fetchContext = flip runReaderT HandlerEnv {..} . runExceptT . runHandler'
+runHandler :: WorkerRequest -> JSObject e -> FetchContext -> Handler e a -> IO (Either ServerReturn (a, WorkerResponse -> Ap IO ()))
+runHandler rawRequest bindings fetchContext = flip runReaderT HandlerEnv {..} . runExceptT . runWriterT . runHandler'
+
+addFinaliser :: (WorkerResponse -> IO ()) -> Handler e ()
+addFinaliser f = Handler $ tell $ Ap . f
+
+getWorkerEnv :: Handler e (JSObject e)
+getWorkerEnv = asks bindings
+
+getEnv ::
+  forall l ->
+  forall es ss bs.
+  (ListMember l es, KnownSymbol l) =>
+  Handler (BindingsClass es ss bs) J.Value
+getEnv l = asks $ Bindings.getEnv l . bindings
+
+getSecret ::
+  forall l ->
+  forall es ss bs.
+  (ListMember l ss, KnownSymbol l) =>
+  Handler (BindingsClass es ss bs) T.Text
+getSecret l = asks $ Bindings.getSecret l . bindings
+
+getBinding ::
+  forall l ->
+  forall es ss bs x.
+  (Member l bs, x ~ Lookup' l bs) =>
+  Handler (BindingsClass es ss bs) (JSObject x)
+getBinding l = asks $ Bindings.getBinding l . bindings
+
+earlyReturn :: RoutingResponse -> Handler e a
+earlyReturn = throwError . Response

@@ -30,6 +30,10 @@ module Servant.Cloudflare.Workers (
   emptyServer,
   Handler (..),
   runHandler,
+  earlyReturn,
+  getEnv,
+  getSecret,
+  getBinding,
 
   -- * Debugging the server layout
   layout,
