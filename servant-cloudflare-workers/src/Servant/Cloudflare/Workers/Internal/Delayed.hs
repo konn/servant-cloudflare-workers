@@ -22,11 +22,11 @@ import Control.Monad.Trans.Resource (
 import Data.Monoid (Ap (..))
 import GHC.Wasm.Object.Builtins
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
-import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Servant.Cloudflare.Workers.Internal.DelayedIO
 import Servant.Cloudflare.Workers.Internal.Handler
 import Servant.Cloudflare.Workers.Internal.Response
 import Servant.Cloudflare.Workers.Internal.RouteResult
+import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest)
 import Servant.Cloudflare.Workers.Internal.ServerError (responseServerError)
 
 {- | A 'Delayed' is a representation of a handler with scheduled
@@ -112,7 +112,7 @@ data Delayed e env c where
         headers ->
         auth ->
         body ->
-        WorkerRequest ->
+        RoutingRequest ->
         RouteResult c
     } ->
     Delayed e env c
@@ -235,7 +235,7 @@ addAcceptCheck Delayed {..} new =
 the handler without the possibility of failure. In such a
 case, 'passToServer' can be used.
 -}
-passToServer :: Delayed e env (a -> b) -> (WorkerRequest -> a) -> Delayed e env b
+passToServer :: Delayed e env (a -> b) -> (RoutingRequest -> a) -> Delayed e env b
 passToServer Delayed {..} x =
   Delayed
     { serverD = \c p h a b req -> ($ x req) <$> serverD c p h a b req
@@ -252,12 +252,12 @@ effect and HTTP error ordering break down.
 runDelayed ::
   Delayed e env a ->
   env ->
-  WorkerRequest ->
+  RoutingRequest ->
   JSObject e ->
   FetchContext ->
   ResourceT IO (RouteResult a)
 runDelayed Delayed {..} env = runDelayedIO $ do
-  (_, r) <- ask
+  HandlerEnv {..} <- ask
   c <- capturesD env
   methodD
   a <- authD
@@ -266,7 +266,7 @@ runDelayed Delayed {..} env = runDelayedIO $ do
   p <- paramsD -- Has to be before body parsing, but after content-type checks
   h <- headersD
   b <- bodyD content
-  liftRouteResult (serverD c p h a b r)
+  liftRouteResult (serverD c p h a b request)
 
 {- | Runs a delayed server and the resulting action.
 Takes a continuation that lets us send a response.
@@ -276,7 +276,7 @@ result of the delayed server into a response.
 runAction ::
   Delayed e env (Handler e a) ->
   env ->
-  WorkerRequest ->
+  RoutingRequest ->
   JSObject e ->
   FetchContext ->
   (RouteResult RoutingResponse -> IO r) ->

@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 
@@ -63,7 +64,7 @@ import GHC.TypeLits (ErrorMessage (..), KnownNat, KnownSymbol, TypeError, symbol
 import GHC.Wasm.Object.Builtins
 import GHC.Wasm.Web.ReadableStream (ReadableStream, toReadableStream)
 import qualified GHC.Wasm.Web.ReadableStream as RS
-import Network.Cloudflare.Worker.Handler.Fetch (FetchContext, FetchHandler)
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import qualified Network.Cloudflare.Worker.Request as Req
 import Network.Cloudflare.Worker.Response (WorkerResponse, WorkerResponseBody (..))
@@ -147,6 +148,7 @@ import Servant.Cloudflare.Workers.Internal.ServerError
 import Servant.Cloudflare.Workers.ReadableStream
 import qualified Streaming.ByteString as Q
 import System.IO.Unsafe (unsafePerformIO)
+import Text.Read (readMaybe)
 import Web.HttpApiData (
   FromHttpApiData,
   parseHeader,
@@ -253,7 +255,7 @@ instance
             case ( sbool :: SBool (FoldLenient mods)
                  , parseUrlPiece txt :: Either T.Text a
                  ) of
-              (SFalse, Left e) -> delayedFail $ formatError rep request $ T.unpack e
+              (SFalse, Left e) -> delayedFail $ formatError rep request.rawRequest $ T.unpack e
               (SFalse, Right v) -> return v
               (STrue, piece) -> return $ either (Left . T.unpack) Right piece
         )
@@ -303,7 +305,7 @@ instance
         context
         ( addCapture d $ \txts -> withRequest $ \request _ _ ->
             case parseUrlPieces txts of
-              Left e -> delayedFail $ formatError rep request $ T.unpack e
+              Left e -> delayedFail $ formatError rep request.rawRequest $ T.unpack e
               Right v -> return v
         )
     where
@@ -397,7 +399,7 @@ methodRouter splitHeaders method proxy status action = leafRouter route'
                 `addAcceptCheck` acceptCheck proxy accH
             )
             env
-            request.rawRequest
+            request
             obj
             fctx
             respond
@@ -420,7 +422,7 @@ noContentRouter method status action = leafRouter route'
       runAction
         (action `addMethodCheck` methodCheck method request)
         env
-        request.rawRequest
+        request
         b
         ctx
         respond
@@ -527,7 +529,7 @@ streamRouter splitHeaders method status _ ctypeproxy action = leafRouter $ \env 
             `addAcceptCheck` accCheck
         )
         env
-        request.rawRequest
+        request
         b
         fctx
         respond
@@ -598,16 +600,16 @@ instance
         unfoldRequestArgument (Proxy :: Proxy mods) errReq errSt mev
         where
           mev :: Maybe (Either T.Text a)
-          mev = fmap parseHeader $ lookup headerName (requestHeaders req)
+          mev = fmap parseHeader $ lookup headerName (requestHeaders req.rawRequest)
 
           errReq =
             delayedFailFatal $
-              formatError rep req $
+              formatError rep req.rawRequest $
                 "Header " <> headerName <> " is required"
 
           errSt e =
             delayedFailFatal $
-              formatError rep req $
+              formatError rep req.rawRequest $
                 T.unpack $
                   "Error parsing header "
                     <> headerName
@@ -683,7 +685,7 @@ instance
                       <> e
 
         delayed = addParameterCheck subserver . withRequest $ \req _ _ ->
-          parseParam req
+          parseParam req.rawRequest
      in route pe (Proxy :: Proxy api) context delayed
 
 queryString :: WorkerRequest -> Query
@@ -736,7 +738,7 @@ instance
           ([], parsed) -> return parsed
           (errs, _) ->
             delayedFailFatal $
-              formatError rep req $
+              formatError rep req.rawRequest $
                 T.unpack $
                   "Error parsing query parameter(s) "
                     <> paramname
@@ -752,7 +754,7 @@ instance
               . decodePath
               . extractPath
               . TE.encodeUtf8
-              $ Req.getUrl req
+              $ Req.getUrl req.rawRequest
 
           looksLikeParam name = name == paramname || name == (paramname <> "[]")
 
@@ -781,7 +783,7 @@ instance
 
   route pe Proxy context subserver =
     let querytext = queryToQueryText . queryString
-        param r = case lookup paramname (querytext r) of
+        param r = case lookup paramname (querytext r.rawRequest) of
           Just Nothing -> True -- param is there, with no value
           Just (Just v) -> examine v -- param with a value
           Nothing -> False -- param not in the query string
@@ -821,7 +823,7 @@ instance
   hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
 
   route pe Proxy context subserver =
-    route pe (Proxy :: Proxy api) context (passToServer subserver queryString)
+    route pe (Proxy :: Proxy api) context (passToServer subserver $ queryString . (.rawRequest))
 
 {- | If you use @'DeepQuery' "symbol" a@ in one of the endpoints for your API,
 this automatically requires your server-side handler to be a function
@@ -874,7 +876,7 @@ instance
               mapMaybe isRelevantParam
                 . queryToQueryText
                 . queryString
-                $ req
+                $ req.rawRequest
             isRelevantParam (name, value) =
               (,value)
                 <$> case T.stripPrefix paramname name of
@@ -884,7 +886,7 @@ instance
          in case fromDeepQuery =<< traverse parseDeepParam relevantParams of
               Left e ->
                 delayedFailFatal $
-                  formatError rep req $
+                  formatError rep req.rawRequest $
                     T.unpack $
                       "Error parsing deep query parameter(s) "
                         <> paramname
@@ -916,7 +918,7 @@ Example:
 > server = serveDirectory "/var/www/images"
 -}
 instance HasWorker e Raw context where
-  type WorkerT e Raw m = Tagged m (FetchHandler e)
+  type WorkerT e Raw m = Tagged m (RoutingRequest -> JSObject e -> FetchContext -> IO WorkerResponse)
 
   hoistWorkerWithContext _ _ _ _ = retag
 
@@ -924,12 +926,12 @@ instance HasWorker e Raw context where
     -- note: a Raw application doesn't register any cleanup
     -- but for the sake of consistency, we nonetheless run
     -- the cleanup once its done
-    r <- runDelayed rawApplication env request.rawRequest wenv fctx
+    r <- runDelayed rawApplication env request wenv fctx
     liftIO $ go r request wenv fctx respond
     where
       go r request wenv fctx respond = case r of
         FastReturn rsp -> pure rsp
-        Route app -> untag app request.rawRequest wenv fctx
+        Route app -> untag app request wenv fctx
         Fail a -> respond $ Fail a
         FailFatal e -> respond $ FailFatal e
 
@@ -952,11 +954,11 @@ instance HasWorker e RawM context where
       m WorkerResponse
 
   route _ _ _ handleDelayed = RawRouter $ \env request wenv fctx respond -> runResourceT $ do
-    routeResult <- runDelayed handleDelayed env request.rawRequest wenv fctx
+    routeResult <- runDelayed handleDelayed env request wenv fctx
     let respond' = liftIO . respond
     liftIO $ case routeResult of
       Route handler ->
-        runHandler request.rawRequest wenv fctx (handler request wenv fctx respond)
+        runHandler request wenv fctx (handler request wenv fctx respond)
           >>= \case
             Left (Error e) -> respond' $ FailFatal e
             Left (Response r) -> toWorkerResponse r
@@ -1022,18 +1024,18 @@ instance
         let contentTypeH =
               fromMaybe "application/octet-stream" $
                 lookup hContentType $
-                  requestHeaders request
+                  requestHeaders request.rawRequest
         case canHandleCTypeH (Proxy :: Proxy list) (BSL.fromStrict contentTypeH) :: Maybe (BSL.ByteString -> Either String a) of
           Nothing -> delayedFail err415
           Just f -> return f
 
       -- Body check, we get a body parsing functions as the first argument.
       bodyCheck f = withRequest $ \request _ _ -> do
-        mrqbody <- f <$> liftIO (lazyRequestBody request)
+        mrqbody <- f <$> liftIO (lazyRequestBody request.rawRequest)
         case sbool :: SBool (FoldLenient mods) of
           STrue -> return mrqbody
           SFalse -> case mrqbody of
-            Left e -> delayedFailFatal $ formatError rep request e
+            Left e -> delayedFailFatal $ formatError rep request.rawRequest e
             Right v -> return v
 
 lazyRequestBody :: WorkerRequest -> IO BSL.ByteString
@@ -1060,7 +1062,7 @@ instance
 
       bodyCheck :: (ReadableStream -> IO a) -> DelayedIO e a
       bodyCheck fromRS = withRequest $ \req _ _ -> do
-        liftIO $ fromRS =<< reqBodyToStream req
+        liftIO $ fromRS =<< reqBodyToStream req.rawRequest
 
 reqBodyToStream :: WorkerRequest -> IO ReadableStream
 reqBodyToStream =
@@ -1095,7 +1097,7 @@ instance (HasWorker e api context) => HasWorker e (IsSecure :> api) context wher
   route pe Proxy context subserver =
     route pe (Proxy :: Proxy api) context (passToServer subserver secure)
     where
-      secure req = if isSecure req then Secure else NotSecure
+      secure req = if isSecure req.rawRequest then Secure else NotSecure
 
   hoistWorkerWithContext pe _ pc nt s =
     hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
@@ -1110,8 +1112,17 @@ instance (HasWorker e api context) => HasWorker e (HttpVersion :> api) context w
     route pe (Proxy :: Proxy api) context (passToServer subserver httpVersion)
   hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
 
-httpVersion :: WorkerRequest -> HttpVersion
-httpVersion = error "Not implemented"
+httpVersion :: RoutingRequest -> HttpVersion
+httpVersion req = fromMaybe http20 do
+  let ver =
+        T.drop 5 $
+          toText $
+            unsafePerformIO $
+              getDictField "httpProtocol" $
+                Req.getCloudflare
+                  req.rawRequest
+  a : b : _ <- pure $ T.splitOn "." ver
+  HttpVersion <$> readMaybe (T.unpack a) <*> readMaybe (T.unpack b)
 
 -- | Ignore @'Summary'@ in server handlers.
 instance (HasWorker e api ctx) => HasWorker e (Summary desc :> api) ctx where
@@ -1170,7 +1181,7 @@ instance
     where
       realm = BC8.pack $ symbolVal (Proxy :: Proxy realm)
       basicAuthContext = getContextEntry context
-      authCheck = withRequest $ \req _ _ -> runBasicAuth req realm basicAuthContext
+      authCheck = withRequest $ \req _ _ -> runBasicAuth req.rawRequest realm basicAuthContext
 
   hoistWorkerWithContext pe _ pc nt s =
     hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s

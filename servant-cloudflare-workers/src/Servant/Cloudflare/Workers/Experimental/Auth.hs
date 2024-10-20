@@ -28,9 +28,6 @@ import Data.Typeable (
 import GHC.Generics (
   Generic,
  )
-import Network.Cloudflare.Worker.Request (
-  WorkerRequest,
- )
 import Servant.API.Experimental.Auth
 import Servant.Cloudflare.Workers.Internal (
   Handler,
@@ -46,6 +43,7 @@ import Servant.Cloudflare.Workers.Internal.DelayedIO (liftRouteResult)
 import Servant.Cloudflare.Workers.Internal.Handler (Finaliser, ServerReturn (..))
 import Servant.Cloudflare.Workers.Internal.Response (toWorkerResponse)
 import Servant.Cloudflare.Workers.Internal.RouteResult (RouteResult (..))
+import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest)
 import Servant.Cloudflare.Workers.Prelude (
   (:>),
  )
@@ -74,7 +72,7 @@ mkAuthHandler = AuthHandler
 -- | Known orphan instance.
 instance
   ( HasWorker e api context
-  , HasContextEntry context (AuthHandler e WorkerRequest (AuthServerData (AuthProtect tag)))
+  , HasContextEntry context (AuthHandler e RoutingRequest (AuthServerData (AuthProtect tag)))
   ) =>
   HasWorker e (AuthProtect tag :> api) context
   where

@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RequiredTypeArguments #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -16,7 +17,7 @@ import Control.Monad.Catch (
   MonadThrow,
  )
 import Control.Monad.Error.Class (
-  MonadError,
+  MonadError (..),
   throwError,
  )
 import Control.Monad.IO.Class (
@@ -49,6 +50,7 @@ import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.Cloudflare.Workers.Internal.Response
+import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest (..))
 import Servant.Cloudflare.Workers.Internal.ServerError (
   ServerError,
   err500,
@@ -59,7 +61,7 @@ import Servant.Cloudflare.Workers.Internal.ServerError (
 data HandlerEnv e = HandlerEnv
   { bindings :: !(JSObject e)
   , fetchContext :: !FetchContext
-  , rawRequest :: !WorkerRequest
+  , request :: !RoutingRequest
   }
   deriving (Generic)
 
@@ -72,17 +74,33 @@ newtype Handler e a = Handler {runHandler' :: WriterT Finaliser (ExceptT ServerR
     , Applicative
     , Monad
     , MonadIO
-    , MonadError ServerReturn
     , MonadReader (HandlerEnv e)
     , MonadThrow
     , MonadCatch
     , MonadMask
     )
 
+instance MonadError ServerError (Handler e) where
+  throwError = Handler . throwError . Error
+  catchError (Handler m) f =
+    Handler $
+      catchError
+        m
+        ( \case
+            Error err -> runHandler' $ f err
+            l -> throwError l
+        )
+
 data ServerReturn
   = Error ServerError
   | Response RoutingResponse
   deriving (Generic)
+
+getRawRequest :: Handler e WorkerRequest
+getRawRequest = asks $ (.rawRequest) . request
+
+getRemainingPathPieces :: Handler e [T.Text]
+getRemainingPathPieces = asks $ pathInfo . request
 
 responseServerReturn :: ServerReturn -> IO WorkerResponse
 responseServerReturn (Error err) =
@@ -95,7 +113,7 @@ instance Show ServerReturn where
   showsPrec d (Response _) = showParen (d > 10) $ showString "Response (..)"
 
 instance MonadFail (Handler e) where
-  fail str = throwError $ Error err500 {errBody = fromString str}
+  fail str = throwError err500 {errBody = fromString str}
 
 instance MonadBase IO (Handler e) where
   liftBase = Handler . liftBase
@@ -109,8 +127,8 @@ instance MonadBaseControl IO (Handler e) where
   -- restoreM :: StM Handler a -> Handler a
   restoreM st = Handler (restoreM st)
 
-runHandler :: WorkerRequest -> JSObject e -> FetchContext -> Handler e a -> IO (Either ServerReturn (a, WorkerResponse -> Ap IO ()))
-runHandler rawRequest bindings fetchContext = flip runReaderT HandlerEnv {..} . runExceptT . runWriterT . runHandler'
+runHandler :: RoutingRequest -> JSObject e -> FetchContext -> Handler e a -> IO (Either ServerReturn (a, WorkerResponse -> Ap IO ()))
+runHandler request bindings fetchContext = flip runReaderT HandlerEnv {..} . runExceptT . runWriterT . runHandler'
 
 addFinaliser :: (WorkerResponse -> IO ()) -> Handler e ()
 addFinaliser f = Handler $ tell $ Ap . f
@@ -140,4 +158,4 @@ getBinding ::
 getBinding l = asks $ Bindings.getBinding l . bindings
 
 earlyReturn :: RoutingResponse -> Handler e a
-earlyReturn = throwError . Response
+earlyReturn = Handler . throwError . Response

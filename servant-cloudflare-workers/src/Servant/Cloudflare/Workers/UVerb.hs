@@ -122,7 +122,7 @@ instance
                 `addMethodCheck` methodCheck method request
                 `addAcceptCheck` acceptCheck (Proxy @contentTypes) (getAcceptHeader request.rawRequest)
 
-        runAction action' env request.rawRequest b ctx cont $ \(output :: Union as) -> do
+        runAction action' env request b ctx cont $ \(output :: Union as) -> do
           let cts = Proxy @contentTypes
               pickResource :: Union as -> (Status, Maybe (BSL.ByteString, BSL.ByteString), [(HeaderName, B.ByteString)])
               pickResource = foldMapUnion (Proxy @(IsServerResourceWithStatus contentTypes)) (encodeResource request.rawRequest cts)

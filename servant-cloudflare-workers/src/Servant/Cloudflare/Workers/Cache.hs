@@ -38,6 +38,7 @@ import Servant.API.Raw
 import Servant.Cloudflare.Workers (Handler, WorkerT, earlyReturn)
 import Servant.Cloudflare.Workers.Internal.Handler (HandlerEnv (..), addFinaliser)
 import Servant.Cloudflare.Workers.Internal.Response (RoutingResponse (RawResponse))
+import Servant.Cloudflare.Workers.Internal.RoutingApplication
 import qualified Wasm.Prelude.Linear as PL
 
 data CacheOptions = CacheOptions
@@ -50,7 +51,7 @@ data CacheOptions = CacheOptions
 serveCached :: CacheOptions -> Handler e a -> Handler e a
 serveCached copts act = do
   HandlerEnv {..} <- ask
-  liftIO (retrieveCache copts rawRequest) >>= \case
+  liftIO (retrieveCache copts request.rawRequest) >>= \case
     Right resp -> do
       earlyReturn $ RawResponse resp
     Left keyReq -> do
@@ -71,11 +72,11 @@ serveCached copts act = do
 
 serveCachedRaw :: CacheOptions -> WorkerT e Raw m -> WorkerT e Raw m
 serveCachedRaw opts (Tagged app) = Tagged \req env fctx ->
-  serveCachedIO opts req fctx (app req env fctx)
+  serveCachedIO opts req.rawRequest fctx (app req env fctx)
 
 serveCachedRawM :: CacheOptions -> WorkerT e Raw m -> WorkerT e Raw m
 serveCachedRawM opts (Tagged app) = Tagged \req env fctx ->
-  serveCachedIO opts req fctx (app req env fctx)
+  serveCachedIO opts req.rawRequest fctx (app req env fctx)
 
 serveCachedIO ::
   CacheOptions ->
