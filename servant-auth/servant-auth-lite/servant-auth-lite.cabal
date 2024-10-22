@@ -1,0 +1,70 @@
+cabal-version: 2.2
+name: servant-auth-lite
+version: 0.4.2.0
+synopsis: Authentication combinators for servant, a leightweight version
+description:
+  This package provides a lightweight reimplementation of @Auth@ combinator from 'servant-auth'.
+  The difference is that this package does not depend on 'jose' package, which has several depencencies not (currently) portable to WASM backend.
+  .
+  For more details on how to use this, see the <https://github.com/konn/servant-cloudflare-workers/tree/master/servant-auth#readme README>.
+
+category: Web, Servant, Authentication
+homepage: https://github.com/konn/servant-cloudflare-workers/tree/master/servant-auth#readme
+bug-reports: https://github.com/konn/servant-cloudflare-workers/issues
+author: Hiromi ISHII
+maintainer: konn.jinro_at_gmail.com
+copyright:
+  (c) 2016-2024 Julian K. Arni,
+  2024-present Hiromi ISHII
+
+license: BSD-3-Clause
+license-file: LICENSE
+tested-with: ghc ==9.10.1
+build-type: Simple
+extra-source-files:
+  CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/konn/servant-cloudflare-workers
+
+library
+  hs-source-dirs:
+    src
+
+  default-extensions:
+    ConstraintKinds
+    DataKinds
+    DefaultSignatures
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveTraversable
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    KindSignatures
+    MultiParamTypeClasses
+    OverloadedStrings
+    RankNTypes
+    ScopedTypeVariables
+    TypeFamilies
+    TypeOperators
+
+  ghc-options: -Wall
+  build-depends:
+    aeson >=2.0 && <3,
+    base >=4.16.4.0 && <4.21,
+    containers >=0.6.5.1 && <0.8,
+    lens >=4.16.1 && <5.4,
+    servant >=0.20.2 && <0.21,
+    text >=1.2.3.0 && <2.2,
+    time,
+    unordered-containers >=0.2.9.0 && <0.3,
+
+  exposed-modules:
+    Servant.Auth
+    Servant.Auth.JWT
+
+  default-language: Haskell2010
