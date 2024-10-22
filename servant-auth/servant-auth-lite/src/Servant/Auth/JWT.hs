@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -10,6 +11,8 @@
 {-# LANGUAGE NoFieldSelectors #-}
 
 module Servant.Auth.JWT (
+  JWSHeader (..),
+  JWSAlg (..),
   ClaimsSet (..),
   Audiences (..),
   NumericDate (..),
@@ -26,15 +29,19 @@ import Data.Aeson (
   fromJSON,
   toJSON,
   withObject,
+  (.=),
  )
+import qualified Data.Aeson as J
 import qualified Data.Aeson.KeyMap as KM
 import Data.Aeson.Types ((.:?))
+import Data.List.NonEmpty (NonEmpty)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX (POSIXTime)
 import GHC.Generics (Generic)
 import GHC.IsList (IsList)
+import Servant.Links (URI)
 
 newtype Audiences = Audiences {getAudiences :: [T.Text]}
   deriving (Show, Eq, Ord, Generic)
@@ -66,6 +73,39 @@ registeredClaims =
     , "nbf"
     , "sub"
     ]
+
+data JWSAlg
+  = HS256
+  | HS384
+  | HS512
+  | RS256
+  | RS384
+  | RS512
+  | ES256
+  | ES384
+  | ES512
+  | PS256
+  | PS384
+  | PS512
+  | EdDSA
+  deriving (Show, Eq, Ord, Generic)
+  deriving anyclass (FromJSON, ToJSON)
+
+data JWSHeader = JWSHeader
+  { alg :: !JWSAlg
+  , jku :: !(Maybe URI)
+  , jwk :: !(Maybe Value)
+  , kid :: !(Maybe T.Text)
+  , x5u :: !(Maybe URI)
+  , x5c :: !(Maybe (NonEmpty T.Text))
+  , x5t :: !(Maybe T.Text)
+  , -- TODO: x5t#S256
+    typ :: !(Maybe T.Text)
+  , cty :: !(Maybe T.Text)
+  , crit :: !(Maybe (NonEmpty T.Text))
+  }
+  deriving (Show, Eq, Ord, Generic)
+  deriving anyclass (FromJSON, ToJSON)
 
 data ClaimsSet = ClaimsSet
   { iss :: Maybe T.Text
@@ -118,6 +158,20 @@ instance FromJSON ClaimsSet where
     unregisteredClaims <- pure $ KM.toMapText o `M.withoutKeys` registeredClaims
     pure ClaimsSet {exp = exp_, ..}
 
+instance ToJSON ClaimsSet where
+  toJSON ClaimsSet {exp = exp_, ..} =
+    J.Object $
+      mconcat
+        [ "iss" .= J.toJSON iss
+        , "sub" .= J.toJSON sub
+        , "aud" .= J.toJSON aud
+        , "exp" .= J.toJSON exp_
+        , "nbf" .= J.toJSON nbf
+        , "iat" .= J.toJSON iat
+        , "jti" .= J.toJSON jti
+        , KM.fromMapText $ unregisteredClaims `M.withoutKeys` registeredClaims
+        ]
+
 {- | How to decode data from a JWT.
 
 The default implementation assumes the data is stored in the unregistered
@@ -132,6 +186,9 @@ class FromJWT a where
       Error e -> Left $ T.pack e
       Success a -> Right a
 
+instance FromJWT ClaimsSet where
+  decodeJWT = Right
+
 {- | How to encode data from a JWT.
 
 The default implementation stores data in the unregistered @dat@ claim, and
@@ -141,3 +198,6 @@ class ToJWT a where
   encodeJWT :: a -> ClaimsSet
   default encodeJWT :: (ToJSON a) => a -> ClaimsSet
   encodeJWT a = mempty {unregisteredClaims = M.singleton "dat" (toJSON a)}
+
+instance ToJWT ClaimsSet where
+  encodeJWT = id

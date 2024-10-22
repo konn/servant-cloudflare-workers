@@ -30,8 +30,8 @@ import GHC.Generics (Generic)
 import Network.Wai.Handler.Warp (run)
 import System.Environment (getArgs)
 import Servant
-import Servant.Auth.Server
-import Servant.Auth.Server.SetCookieOrphan ()
+import Servant.Cloudflare.Workers
+import Servant.Cloudflare.Workers.SetCookieOrphan ()
 ~~~
 
 `servant-auth` library introduces a combinator `Auth`:
@@ -77,10 +77,10 @@ type Protected
 
 
 -- | 'Protected' will be protected by 'auths', which we still have to specify.
-protected :: Servant.Auth.Server.AuthResult User -> Server Protected
+protected :: Servant.Cloudflare.Workers.AuthResult User -> Server Protected
 -- If we get an "Authenticated v", we can trust the information in v, since
 -- it was signed by a key we trust.
-protected (Servant.Auth.Server.Authenticated user) = return (name user) :<|> return (email user)
+protected (Servant.Cloudflare.Workers.Authenticated user) = return (name user) :<|> return (email user)
 -- Otherwise, we return a 401.
 protected _ = throwAll err401
 
@@ -95,7 +95,7 @@ type Unprotected =
 unprotected :: CookieSettings -> JWTSettings -> Server Unprotected
 unprotected cs jwts = checkCreds cs jwts :<|> serveDirectory "example/static"
 
-type API auths = (Servant.Auth.Server.Auth auths User :> Protected) :<|> Unprotected
+type API auths = (Servant.Cloudflare.Workers.Auth auths User :> Protected) :<|> Unprotected
 
 server :: CookieSettings -> JWTSettings -> Server (API auths)
 server cs jwts = protected :<|> unprotected cs jwts

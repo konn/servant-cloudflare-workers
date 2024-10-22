@@ -1,21 +1,19 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Servant.Auth.Server.Internal.ThrowAll where
-
-#if !MIN_VERSION_servant_server(0,16,0)
-#define ServerError ServantErr
-#endif
+module Servant.Auth.Cloudflare.Workers.Internal.ThrowAll where
 
 import Control.Monad.Error.Class
 import qualified Data.ByteString.Char8 as BS
-import Data.Tagged (Tagged (..))
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
+import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Network.HTTP.Types
-import Network.Wai
-import Servant (NamedRoutes (..), ServerError (..), (:<|>) (..))
 import Servant.API.Generic
-import Servant.Cloudflare.Workers
+import Servant.Cloudflare.Workers hiding (respond)
 import Servant.Cloudflare.Workers.Generic
+import Servant.Cloudflare.Workers.Internal.Response (responseLBS, toWorkerResponse)
+import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest)
+import Servant.Cloudflare.Workers.Prelude ((:<|>) (..))
 
 class ThrowAll a where
   -- | 'throwAll' is a convenience function to throw errors across an entire
@@ -43,19 +41,10 @@ instance {-# OVERLAPPING #-} (ThrowAll b) => ThrowAll (a -> b) where
 instance {-# OVERLAPPABLE #-} (MonadError ServerError m) => ThrowAll (m a) where
   throwAll = throwError
 
--- | for @servant <0.11@
-instance {-# OVERLAPPING #-} ThrowAll Application where
-  throwAll e _req respond =
-    respond $
-      responseLBS
-        (mkStatus (errHTTPCode e) (BS.pack $ errReasonPhrase e))
-        (errHeaders e)
-        (errBody e)
-
 -- | for @servant >=0.11@
-instance {-# OVERLAPPING #-} (MonadError ServerError m) => ThrowAll (Tagged m Application) where
-  throwAll e = Tagged $ \_req respond ->
-    respond $
+instance {-# OVERLAPPING #-} (MonadError ServerError m) => ThrowAll (Tagged m (RoutingRequest -> JSObject e -> FetchContext -> IO WorkerResponse)) where
+  throwAll e = Tagged $ \_req _ _ ->
+    toWorkerResponse $
       responseLBS
         (mkStatus (errHTTPCode e) (BS.pack $ errReasonPhrase e))
         (errHeaders e)

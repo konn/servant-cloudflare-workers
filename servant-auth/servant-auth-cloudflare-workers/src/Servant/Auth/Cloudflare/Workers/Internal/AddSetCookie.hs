@@ -1,18 +1,24 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Servant.Auth.Server.Internal.AddSetCookie where
+module Servant.Auth.Cloudflare.Workers.Internal.AddSetCookie where
 
 import Blaze.ByteString.Builder (toByteString)
+import Control.Monad (forM_)
 import qualified Data.ByteString as BS
+import qualified Data.CaseInsensitive as CI
 import Data.Kind (Type)
+import GHC.Wasm.Object.Builtins (fromHaskellByteString)
+import GHC.Wasm.Web.Generated.Headers (js_fun_append_ByteString_ByteString_undefined)
+import Network.Cloudflare.Worker.Response (WorkerResponse)
+import qualified Network.Cloudflare.Worker.Response as Resp
 import qualified Network.HTTP.Types as HTTP
-import Network.Wai (mapResponseHeaders)
-import Servant
 import Servant.API.Generic
 import Servant.Cloudflare.Workers.Generic
+import Servant.Cloudflare.Workers.Prelude
 import Web.Cookie
 
 -- What are we doing here? Well, the idea is to add headers to the response,
@@ -33,32 +39,32 @@ type family AddSetCookieApiVerb a where
   AddSetCookieApiVerb (Headers ls a) = Headers (Header "Set-Cookie" SetCookie ': ls) a
   AddSetCookieApiVerb a = Headers '[Header "Set-Cookie" SetCookie] a
 
-#if MIN_VERSION_servant_server(0,18,1)
 type family MapAddSetCookieApiVerb (as :: [Type]) where
   MapAddSetCookieApiVerb '[] = '[]
   MapAddSetCookieApiVerb (a ': as) = (AddSetCookieApiVerb a ': MapAddSetCookieApiVerb as)
-#endif
 
 type family AddSetCookieApi a :: Type
 
 type instance AddSetCookieApi (a :> b) = a :> AddSetCookieApi b
 
 type instance AddSetCookieApi (a :<|> b) = AddSetCookieApi a :<|> AddSetCookieApi b
-#if MIN_VERSION_servant_server(0,19,0)
+
 type instance AddSetCookieApi (NamedRoutes api) = AddSetCookieApi (ToServantApi api)
-#endif
+
 type instance
   AddSetCookieApi (Verb method stat ctyps a) =
     Verb method stat ctyps (AddSetCookieApiVerb a)
-#if MIN_VERSION_servant_server(0,18,1)
-type instance AddSetCookieApi (UVerb method ctyps as)
-  = UVerb method ctyps (MapAddSetCookieApiVerb as)
-#endif
+
+type instance
+  AddSetCookieApi (UVerb method ctyps as) =
+    UVerb method ctyps (MapAddSetCookieApiVerb as)
+
 type instance AddSetCookieApi Raw = Raw
-#if MIN_VERSION_servant_server(0,15,0)
-type instance AddSetCookieApi (Stream method stat framing ctyps a)
-  = Stream method stat framing ctyps (AddSetCookieApiVerb a)
-#endif
+
+type instance
+  AddSetCookieApi (Stream method stat framing ctyps a) =
+    Stream method stat framing ctyps (AddSetCookieApiVerb a)
+
 type instance AddSetCookieApi (Headers hs a) = AddSetCookieApiVerb (Headers hs a)
 
 data SetCookieList (n :: Nat) :: Type where
@@ -107,24 +113,28 @@ instance
 
 instance
   {-# OVERLAPS #-}
-  ( AddSetCookies ('S n) (ServerT (ToServantApi api) m) cookiedApi
-  , Generic (api (AsWorkerT m))
-  , GServantProduct (Rep (api (AsWorkerT m)))
-  , ToServant api (AsWorkerT m) ~ ServerT (ToServantApi api) m
+  ( AddSetCookies ('S n) (WorkerT e (ToServantApi api) m) cookiedApi
+  , Generic (api (AsWorkerT e m))
+  , GServantProduct (Rep (api (AsWorkerT e m)))
+  , ToServant api (AsWorkerT e m) ~ WorkerT e (ToServantApi api) m
   ) =>
-  AddSetCookies ('S n) (api (AsWorkerT m)) cookiedApi
+  AddSetCookies ('S n) (api (AsWorkerT e m)) cookiedApi
   where
   addSetCookies cookies = addSetCookies cookies . toServant
 
--- | for @servant <0.11@
-instance AddSetCookies ('S n) Application Application where
-  addSetCookies cookies r request respond =
-    r request $ respond . mapResponseHeaders (++ mkHeaders cookies)
-
 -- | for @servant >=0.11@
-instance AddSetCookies ('S n) (Tagged m Application) (Tagged m Application) where
-  addSetCookies cookies r = Tagged $ \request respond ->
-    unTagged r request $ respond . mapResponseHeaders (++ mkHeaders cookies)
+instance AddSetCookies ('S n) (Tagged m (FetchHandler e)) (Tagged m (FetchHandler e)) where
+  addSetCookies cookies r = Tagged $ \request jsenv fctx ->
+    addHeaders (mkHeaders cookies) =<< unTagged r request jsenv fctx
+
+addHeaders :: [HTTP.Header] -> WorkerResponse -> IO WorkerResponse
+addHeaders newHdrs resp = do
+  hdrs <- Resp.getHeaders resp
+  forM_ newHdrs \(hdr, val) -> do
+    hdr' <- fromHaskellByteString $ CI.original hdr
+    val' <- fromHaskellByteString val
+    js_fun_append_ByteString_ByteString_undefined hdrs hdr' val'
+  pure resp
 
 mkHeaders :: SetCookieList x -> [HTTP.Header]
 mkHeaders x = ("Set-Cookie",) <$> mkCookies x

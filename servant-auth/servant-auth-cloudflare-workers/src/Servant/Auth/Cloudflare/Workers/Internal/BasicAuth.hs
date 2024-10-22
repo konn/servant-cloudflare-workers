@@ -1,22 +1,16 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 
-module Servant.Auth.Server.Internal.BasicAuth where
-
-#if !MIN_VERSION_servant_server(0,16,0)
-#define ServerError ServantErr
-#endif
+module Servant.Auth.Cloudflare.Workers.Internal.BasicAuth where
 
 import qualified Data.ByteString as BS
-import Servant (
-  BasicAuthData (..),
-  ServerError (..),
-  err401,
- )
-import Servant.Auth.Server.Internal.Types
+import Servant.Auth.Cloudflare.Workers.Internal.Types
 import Servant.Cloudflare.Workers.Internal.BasicAuth (
   decodeBAHdr,
   mkBAChallengerHdr,
  )
+import Servant.Cloudflare.Workers.Internal.RoutingApplication
+import Servant.Cloudflare.Workers.Prelude
 
 {- | A 'ServerError' that asks the client to authenticate via Basic
 Authentication, should be invoked by an application whenever
@@ -61,6 +55,6 @@ class FromBasicAuthData a where
   fromBasicAuthData :: BasicAuthData -> BasicAuthCfg -> IO (AuthResult a)
 
 basicAuthCheck :: (FromBasicAuthData usr) => BasicAuthCfg -> AuthCheck usr
-basicAuthCheck cfg = AuthCheck $ \req -> case decodeBAHdr req of
+basicAuthCheck cfg = AuthCheck $ \req -> case decodeBAHdr req.rawRequest of
   Nothing -> return Indefinite
   Just baData -> fromBasicAuthData baData cfg

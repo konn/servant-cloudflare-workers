@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeApplications #-}
-module Servant.Auth.ServerSpec (spec) where
+module Servant.Cloudflare.WorkersSpec (spec) where
 
 #if !MIN_VERSION_servant_server(0,16,0)
 #define ServerError ServantErr
@@ -53,9 +53,9 @@ import           Network.Wreq.Types                  (Postable(..))
 import           Servant                             hiding (BasicAuth,
                                                       IsSecure (..), header)
 import           Servant.API.Generic                 ((:-))
-import           Servant.Auth.Server
-import           Servant.Auth.Server.Internal.Cookie (expireTime)
-import           Servant.Auth.Server.SetCookieOrphan ()
+import           Servant.Auth.Cloudflare.WorkersWorkers
+import           Servant.Auth.Cloudflare.WorkersWorkers.Internal.Cookie (expireTime)
+import           Servant.Auth.Cloudflare.WorkersWorkers.SetCookieOrphan ()
 #if MIN_VERSION_servant_server(0,15,0)
 import qualified Servant.Types.SourceT             as S
 #endif
@@ -438,7 +438,7 @@ data DummyRoutes mode = DummyRoutes
   { dummyInt :: mode :- "dummy" :> Get '[JSON] Int
   } deriving Generic
 
-jwtOnlyApi :: Proxy (API '[Servant.Auth.Server.JWT])
+jwtOnlyApi :: Proxy (API '[Servant.Auth.Cloudflare.WorkersWorkers.JWT])
 jwtOnlyApi = Proxy
 
 cookieOnlyApi :: Proxy (API '[Cookie])
@@ -447,7 +447,7 @@ cookieOnlyApi = Proxy
 basicAuthApi :: Proxy (API '[BasicAuth])
 basicAuthApi = Proxy
 
-jwtAndCookieApi :: Proxy (API '[Servant.Auth.Server.JWT, Cookie])
+jwtAndCookieApi :: Proxy (API '[Servant.Auth.Cloudflare.WorkersWorkers.JWT, Cookie])
 jwtAndCookieApi = Proxy
 
 theKey :: JWK
