@@ -98,8 +98,7 @@ library
   default-language: Haskell2010
 
 test-suite readme
-  if os(wasi)
-    buildable: False
+  buildable: False
   type: exitcode-stdio-1.0
   main-is: README.lhs
   default-extensions:
@@ -143,8 +142,7 @@ test-suite readme
     buildable: False
 
 test-suite spec
-  if os(wasi)
-    buildable: False
+  buildable: False
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs:
@@ -193,6 +191,7 @@ test-suite spec
     http-client >=0.5.13.1 && <0.8,
     lens-aeson >=1.0.2 && <1.3,
     servant-auth-cloudflare-workers,
+    servant-cloudflare-workers,
     text >=1.2.3.0 && <2.2,
     warp >=3.2.25 && <3.5,
     wreq >=0.5.2.1 && <0.6,

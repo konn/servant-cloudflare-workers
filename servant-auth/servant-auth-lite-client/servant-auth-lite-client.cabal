@@ -1,5 +1,5 @@
 cabal-version: 2.2
-name: servant-auth-client
+name: servant-auth-lite-client
 version: 0.4.2.0
 synopsis: servant-client/servant-auth compatibility
 description:
@@ -67,8 +67,7 @@ library
   default-language: Haskell2010
 
 test-suite spec
-  if os(wasi)
-    buildable: False
+  buildable: False
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs: test

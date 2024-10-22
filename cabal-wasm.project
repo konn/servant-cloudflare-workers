@@ -2,8 +2,10 @@ with-compiler: wasm32-wasi-9.10.1
 import: cabal-common.project
 packages:
   servant-cloudflare-workers/
+  servant-client-fetch/
   servant-auth/servant-auth-lite
-  -- servant-auth/servant-auth-client
+  servant-auth/servant-auth-cloudflare-workers
+  servant-auth/servant-auth-lite-client
 optimization: False
 active-repositories: hackage.haskell.org
 semaphore: True
