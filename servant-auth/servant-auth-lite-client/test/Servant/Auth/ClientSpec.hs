@@ -42,7 +42,7 @@ import Control.Monad.Trans.Except (runExceptT)
 
 import Servant.Auth.Client
 import Servant.Cloudflare.Workers
-import Servant.Auth.Cloudflare.WorkersWorkers.SetCookieOrphan ()
+import Servant.Auth.Cloudflare.Workers.SetCookieOrphan ()
 
 spec :: Spec
 spec = describe "The JWT combinator" $ do
