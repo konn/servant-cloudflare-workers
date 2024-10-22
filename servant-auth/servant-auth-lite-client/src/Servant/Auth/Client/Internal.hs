@@ -18,7 +18,7 @@ import Servant.Client.Core
 -- | A simple token.
 data Token
   = BearerToken !BS.ByteString
-  | CloudflareToken !ServiceToken
+  | CloudflareToken !(Maybe ServiceToken)
   deriving (Eq, Show, Read, Generic)
 
 data ServiceToken = ServiceToken {clientId, clientSecret :: !BS.ByteString}
@@ -43,7 +43,9 @@ instance (HasBearer auths, HasClient m api) => HasClient m (Auth auths a :> api)
       req {requestHeaders = ("Authorization", headerVal) <| requestHeaders req}
     where
       headerVal = "Bearer " <> token
-  clientWithRoute m _ req (CloudflareToken ServiceToken {..}) =
+  clientWithRoute m _ req (CloudflareToken Nothing) =
+    clientWithRoute m (Proxy :: Proxy api) req
+  clientWithRoute m _ req (CloudflareToken (Just ServiceToken {..})) =
     clientWithRoute m (Proxy :: Proxy api) $
       req
         { requestHeaders =
