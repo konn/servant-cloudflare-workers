@@ -21,11 +21,11 @@ import Servant.Cloudflare.Workers.Prelude (
  )
 
 instance
-  ( AreAuths auths ctxs v
+  ( AreAuths e auths ctxs v
   , HasWorker e api ctxs
   , ToJWT v
-  , HasContextEntry ctxs JWTSettings
-  , HasContextEntry ctxs CloudflareZeroTrustSettings
+  , HasContextEntry ctxs (JWTSettings e)
+  , HasContextEntry ctxs (CloudflareZeroTrustSettings e)
   ) =>
   HasWorker e (Auth auths v :> api) ctxs
   where
@@ -41,8 +41,8 @@ instance
       (fmap go subserver `addAuthCheck` authCheck)
     where
       authCheck :: DelayedIO e (AuthResult v)
-      authCheck = withRequest $ \req _ _ -> liftIO $ do
-        authResult <- runAuthCheck (runAuths (Proxy :: Proxy auths) context) req
+      authCheck = withRequest $ \req env c -> liftIO $ do
+        authResult <- runAuthCheck (runAuths (Proxy :: Proxy auths) context) req env c
         pure (authResult)
 
       go ::

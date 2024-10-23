@@ -1,12 +1,16 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Effectful.Servant.Cloudflare.Workers (
   ServantWorker,
   compileWorker,
+  genericCompileWorker,
   compileWorkerWithContext,
+  genericCompileWorkerWithContext,
   runWorker,
   runWorkerWithContext,
   HasUniqueWorkerWith,
@@ -34,6 +38,7 @@ module Effectful.Servant.Cloudflare.Workers (
   interpretWorker,
 
   -- * Re-exports
+  Context (..),
   AsWorkerT,
   AsWorker,
   B.Member,
@@ -117,7 +122,7 @@ import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.API qualified as Servant
 import Servant.Cloudflare.Workers qualified as Servant
-import Servant.Cloudflare.Workers.Generic (AsWorker, AsWorkerT)
+import Servant.Cloudflare.Workers.Generic (AsWorker, AsWorkerT, genericWorkerT)
 import Servant.Cloudflare.Workers.Internal.Handler (
   Finaliser,
   HandlerEnv (..),
@@ -128,11 +133,14 @@ import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest (.
 import Servant.Cloudflare.Workers.Prelude (
   Context (EmptyContext),
   FetchHandler,
+  GenericServant,
   Handler (Handler),
   HasWorker (WorkerT),
   JSHandlers,
   Proxy (..),
   ServerError (errBody),
+  ToServant,
+  ToServantApi,
   WorkerContext,
   err300,
   err301,
@@ -180,6 +188,17 @@ compileWorker ::
   IO JSHandlers
 compileWorker act = toJSHandlers Handlers {fetch = runWorker @e @api act}
 
+genericCompileWorker ::
+  forall e routes.
+  ( HasWorker e (ToServantApi routes) '[]
+  , GenericServant routes (AsWorkerT e (Eff '[ServantWorker e, IOE]))
+  , ToServant routes (AsWorkerT e (Eff [ServantWorker e, IOE]))
+      ~ WorkerT e (ToServantApi routes) (Eff '[ServantWorker e, IOE])
+  ) =>
+  routes (AsWorkerT e (Eff '[ServantWorker e, IOE])) ->
+  IO JSHandlers
+genericCompileWorker = compileWorker @e @(ToServantApi routes) . genericWorkerT @e @routes
+
 compileWorkerWithContext ::
   forall e api ctx.
   (HasWorker e api ctx, WorkerContext ctx) =>
@@ -188,6 +207,19 @@ compileWorkerWithContext ::
   IO JSHandlers
 compileWorkerWithContext ctx act = runEff $ unsafeEff \es ->
   toJSHandlers Handlers {fetch = runWorkerWithContext @e @api es ctx act}
+
+genericCompileWorkerWithContext ::
+  forall e routes ctx.
+  ( HasWorker e (ToServantApi routes) ctx
+  , WorkerContext ctx
+  , GenericServant routes (AsWorkerT e (Eff '[ServantWorker e, IOE]))
+  , ToServant routes (AsWorkerT e (Eff [ServantWorker e, IOE]))
+      ~ WorkerT e (ToServantApi routes) (Eff '[ServantWorker e, IOE])
+  ) =>
+  Context ctx ->
+  routes (AsWorkerT e (Eff '[ServantWorker e, IOE])) ->
+  IO JSHandlers
+genericCompileWorkerWithContext ctx = compileWorkerWithContext @e @(ToServantApi routes) ctx . genericWorkerT @e @routes
 
 runWorker ::
   forall e api.

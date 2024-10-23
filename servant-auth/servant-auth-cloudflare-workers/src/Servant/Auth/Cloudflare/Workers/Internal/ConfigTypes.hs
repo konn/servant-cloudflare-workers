@@ -22,6 +22,7 @@ import GHC.Generics (Generic)
 import GHC.Wasm.Object.Builtins
 import GHC.Wasm.Web.Generated.CryptoKey (CryptoKey)
 import GHC.Wasm.Web.Generated.JsonWebKey.Core (JsonWebKey)
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Servant.API (IsSecure (..))
 import Servant.Auth.JWT
 
@@ -40,8 +41,8 @@ data SameSite = AnySite | SameSiteStrict | SameSiteLax
   deriving (Eq, Show, Read, Generic, Ord)
 
 -- | @JWTSettings@ are used to generate cookies, and to verify JWTs.
-data JWTSettings = JWTSettings
-  { validationKeys :: [(Maybe T.Text, CryptoKey)]
+data JWTSettings e = JWTSettings
+  { validationKeys :: JSObject e -> FetchContext -> IO [(Maybe T.Text, CryptoKey)]
   -- ^ Keys used to validate JWT.
   , audienceMatches :: T.Text -> IsMatch
   -- ^ An @aud@ predicate. The @aud@ is a string or URI that identifies the
@@ -50,10 +51,10 @@ data JWTSettings = JWTSettings
   deriving (Generic)
 
 -- | A @JWTSettings@ where the audience always matches.
-defaultJWTSettings :: CryptoKey -> JWTSettings
+defaultJWTSettings :: CryptoKey -> JWTSettings e
 defaultJWTSettings k =
   JWTSettings
-    { validationKeys = [(Nothing, k)]
+    { validationKeys = const $ const $ pure [(Nothing, k)]
     , audienceMatches = const Matches
     }
 
@@ -128,9 +129,9 @@ defaultXsrfCookieSettings =
     , xsrfExcludeGet = False
     }
 
-data CloudflareZeroTrustSettings = CloudflareZeroTrustSettings
+data CloudflareZeroTrustSettings e = CloudflareZeroTrustSettings
   { cfAudienceId :: T.Text
-  , cfValidationKeys :: HashMap T.Text CryptoKey
+  , cfValidationKeys :: JSObject e -> FetchContext -> IO (HashMap T.Text CryptoKey)
   }
   deriving (Generic)
 

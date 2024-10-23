@@ -7,6 +7,8 @@ import Control.Monad (MonadPlus (..), ap)
 import qualified Control.Monad.Fail as Fail
 import Control.Monad.Reader
 import GHC.Generics (Generic)
+import GHC.Wasm.Object.Builtins
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest)
 
 -- | The result of an authentication attempt.
@@ -17,7 +19,7 @@ data AuthResult val
     Authenticated val
   | -- | If an authentication procedure cannot be carried out - if for example it
     -- expects a password and username in a header that is not present -
-    -- @Indefinite@ is returned. This indicates that other authentication
+    -- @Indefinite@ is pureed. This indicates that other authentication
     -- methods should be tried.
     Indefinite
   deriving (Eq, Show, Read, Generic, Ord, Functor, Traversable, Foldable)
@@ -53,52 +55,54 @@ instance MonadPlus AuthResult where
 Monoid or Alternative; the semantics of this is that the *first*
 non-'Indefinite' result from left to right is used and the rest are ignored.
 -}
-newtype AuthCheck val = AuthCheck
-  {runAuthCheck :: RoutingRequest -> IO (AuthResult val)}
+newtype AuthCheck e val = AuthCheck
+  {runAuthCheck :: RoutingRequest -> JSObject e -> FetchContext -> IO (AuthResult val)}
   deriving (Generic, Functor)
 
-instance Semigroup (AuthCheck val) where
-  AuthCheck f <> AuthCheck g = AuthCheck $ \x -> do
-    fx <- f x
+instance Semigroup (AuthCheck e val) where
+  AuthCheck f <> AuthCheck g = AuthCheck $ \x y z -> do
+    fx <- f x y z
     case fx of
-      Indefinite -> g x
+      Indefinite -> g x y z
       r -> pure r
 
-instance Monoid (AuthCheck val) where
-  mempty = AuthCheck $ const $ return mempty
+instance Monoid (AuthCheck e val) where
+  mempty = AuthCheck $ const $ pure mempty
   mappend = (<>)
 
-instance Applicative AuthCheck where
-  pure = AuthCheck . return . return . return
+instance Applicative (AuthCheck e) where
+  pure = AuthCheck . pure . pure . pure . pure . pure
   (<*>) = ap
 
-instance Monad AuthCheck where
-  AuthCheck ac >>= f = AuthCheck $ \req -> do
-    aresult <- ac req
+instance Monad (AuthCheck e) where
+  AuthCheck ac >>= f = AuthCheck $ \req env fctx -> do
+    aresult <- ac req env fctx
     case aresult of
-      Authenticated usr -> runAuthCheck (f usr) req
-      BadPassword -> return BadPassword
-      NoSuchUser -> return NoSuchUser
-      Indefinite -> return Indefinite
+      Authenticated usr -> runAuthCheck (f usr) req env fctx
+      BadPassword -> pure BadPassword
+      NoSuchUser -> pure NoSuchUser
+      Indefinite -> pure Indefinite
 
 #if !MIN_VERSION_base(4,13,0)
   fail = Fail.fail
 #endif
 
-instance Fail.MonadFail AuthCheck where
-  fail _ = AuthCheck . const $ return Indefinite
+instance Fail.MonadFail (AuthCheck e) where
+  fail _ = AuthCheck . const . const . const $ pure Indefinite
 
-instance MonadReader RoutingRequest AuthCheck where
-  ask = AuthCheck $ \x -> return (Authenticated x)
-  local f (AuthCheck check) = AuthCheck $ \req -> check (f req)
+instance MonadReader (RoutingRequest, JSObject e, FetchContext) (AuthCheck e) where
+  ask = AuthCheck $ \x y z -> pure (Authenticated (x, y, z))
+  local f (AuthCheck check) = AuthCheck $ \req e fctx ->
+    let (req', e', fctx') = f (req, e, fctx)
+     in check req' e' fctx'
 
-instance MonadIO AuthCheck where
-  liftIO action = AuthCheck $ const $ Authenticated <$> action
+instance MonadIO (AuthCheck e) where
+  liftIO action = AuthCheck $ const $ const $ const $ Authenticated <$> action
 
-instance Alternative AuthCheck where
+instance Alternative (AuthCheck e) where
   empty = mzero
   (<|>) = mplus
 
-instance MonadPlus AuthCheck where
+instance MonadPlus (AuthCheck e) where
   mzero = mempty
   mplus = (<>)
