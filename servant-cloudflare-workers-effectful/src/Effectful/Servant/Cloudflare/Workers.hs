@@ -46,6 +46,7 @@ module Effectful.Servant.Cloudflare.Workers (
   RoutingResponse (..),
   WorkerRequest,
   ServerReturn (..),
+  ServerError (..),
   err300,
   err301,
   err302,
