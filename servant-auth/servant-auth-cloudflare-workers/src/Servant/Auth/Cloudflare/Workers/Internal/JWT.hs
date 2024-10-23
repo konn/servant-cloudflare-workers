@@ -38,7 +38,7 @@ module Servant.Auth.Cloudflare.Workers.Internal.JWT (
 ) where
 
 import Control.Exception.Safe (throwString)
-import Control.Monad (MonadPlus (..), guard, unless, when)
+import Control.Monad (MonadPlus (..), guard, unless, when, (<=<))
 import Control.Monad.Except (ExceptT (ExceptT), runExceptT)
 import Control.Monad.Reader
 import Data.Aeson (FromJSON, fromJSON)
@@ -477,15 +477,15 @@ newtype Keys = Keys {keys :: HashMap T.Text J.Value}
   deriving anyclass (J.FromJSON)
 
 defaultCloudflareZeroTrustSettings ::
-  AudienceId ->
-  TeamName ->
+  Maybe AudienceId ->
+  Maybe TeamName ->
   IO CloudflareZeroTrustSettings
 defaultCloudflareZeroTrustSettings cfAudienceId teamName = do
-  rsp <-
-    await
-      =<< Fetch.get ("https://" <> teamName <> ".cloudflareaccess.com/cdn-cgi/access/certs")
-  val <-
-    either throwString (mapM encodeJSON . (.keys))
+  cfValidationKeys <- fmap (fromMaybe mempty) $ forM teamName \team -> do
+    rsp <-
+      await
+        =<< Fetch.get ("https://" <> team <> ".cloudflareaccess.com/cdn-cgi/access/certs")
+    either throwString (mapM (toCryptoKey RS256 . unsafeCast <=< encodeJSON) . (.keys))
       . eitherResult
       . fromJSON @Keys
       . fst
@@ -495,5 +495,4 @@ defaultCloudflareZeroTrustSettings cfAudienceId teamName = do
         (AQ.parse AA.json' . fromReadableStream)
         . fromNullable
       =<< Resp.js_get_body rsp
-  cfValidationKeys <- forM val $ toCryptoKey RS256 . unsafeCast
   pure CloudflareZeroTrustSettings {..}

@@ -131,7 +131,7 @@ defaultXsrfCookieSettings =
     }
 
 data CloudflareZeroTrustSettings = CloudflareZeroTrustSettings
-  { cfAudienceId :: T.Text
+  { cfAudienceId :: Maybe T.Text
   , cfValidationKeys :: HashMap T.Text CryptoKey
   }
   deriving (Generic)
@@ -140,7 +140,7 @@ toJWTSettings :: CloudflareZeroTrustSettings -> JWTSettings
 toJWTSettings CloudflareZeroTrustSettings {..} =
   JWTSettings
     { validationKeys = map (Bi.first Just) $ HM.toList cfValidationKeys
-    , audienceMatches = \aud -> if aud == cfAudienceId then Matches else DoesNotMatch
+    , audienceMatches = \aud -> if maybe True (aud ==) cfAudienceId then Matches else DoesNotMatch
     }
 
 type AudienceId = T.Text
