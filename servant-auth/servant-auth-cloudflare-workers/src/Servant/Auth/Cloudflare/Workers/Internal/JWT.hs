@@ -72,6 +72,7 @@ import GHC.Wasm.Web.Generated.JsonWebKey
 import qualified GHC.Wasm.Web.Generated.Response as Resp
 import GHC.Wasm.Web.Generated.SubtleCrypto (js_fun_importKey_KeyFormat_object_AlgorithmIdentifier_boolean_sequence_KeyUsage_Promise_any, js_fun_verify_AlgorithmIdentifier_CryptoKey_BufferSource_BufferSource_Promise_any)
 import GHC.Wasm.Web.JSON (decodeJSON, encodeJSON)
+import qualified GHC.Wasm.Web.JSON as JSON
 import GHC.Wasm.Web.ReadableStream (fromReadableStream)
 import Network.Cloudflare.Worker.Crypto (subtleCrypto)
 import qualified Network.Cloudflare.Worker.FetchAPI as Fetch
@@ -432,6 +433,9 @@ toCryptoKey alg jwk =
 
 detectAlgorithm :: CryptoKey -> Maybe JWSAlg
 detectAlgorithm key = do
+  !() <- pure $ unsafePerformIO $ do
+    val <- JSON.decodeJSON @J.Value $ unsafeCast key
+    consoleLog $ fromText $ T.pack $ "Crypto: " <> show val
   !rawAlg <- unsafePerformIO $ decodeJSON @AlgorithmParams =<< CryptoKey.js_get_algorithm key
   !() <- pure $ unsafePerformIO $ consoleLog $ fromText $ T.pack $ "Raw Algorithm: " <> show rawAlg
   case rawAlg.name of
