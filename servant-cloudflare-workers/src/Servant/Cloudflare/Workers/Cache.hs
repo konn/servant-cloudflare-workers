@@ -16,7 +16,7 @@ module Servant.Cloudflare.Workers.Cache (
 ) where
 
 import Control.Monad (when)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader (..))
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Map.Strict as Map
@@ -61,23 +61,24 @@ serveCachedRaw :: CacheOptions -> WorkerT e Raw m -> WorkerT e Raw m
 serveCachedRaw opts (Tagged app) = Tagged \req env fctx ->
   serveCachedIO opts req.rawRequest fctx (app req env fctx)
 
-serveCachedRawM :: CacheOptions -> WorkerT e Raw m -> WorkerT e Raw m
-serveCachedRawM opts (Tagged app) = Tagged \req env fctx ->
-  serveCachedIO opts req.rawRequest fctx (app req env fctx)
+serveCachedRawM :: (MonadIO m) => CacheOptions -> WorkerT e RawM m -> WorkerT e RawM m
+serveCachedRawM opts act req env ctx respond =
+  serveCachedIO opts req.rawRequest ctx (act req env ctx respond)
 
 serveCachedIO ::
+  (MonadIO m) =>
   CacheOptions ->
   WorkerRequest ->
   FetchContext ->
-  IO WorkerResponse ->
-  IO WorkerResponse
+  m WorkerResponse ->
+  m WorkerResponse
 serveCachedIO opts req ctx act = do
-  mcache <- retrieveCache opts req
+  mcache <- liftIO $ retrieveCache opts req
   case mcache of
     Right resp -> pure resp
     Left keyReq -> do
       resp <- act
-      saveCache opts ctx keyReq resp
+      liftIO $ saveCache opts ctx keyReq resp
       pure resp
 
 saveCache :: CacheOptions -> FetchContext -> CacheKeyRequest -> WorkerResponse -> IO ()
