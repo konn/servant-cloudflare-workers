@@ -16,6 +16,11 @@ build-all:
   COPY --keep-ts ./*.project ./
   COPY --keep-ts ./*.freeze ./
   COPY --keep-ts ./servant-cloudflare-workers ./servant-cloudflare-workers
+  COPY --keep-ts ./servant-cloudflare-workers-effectful ./servant-cloudflare-workers-effectful
+  COPY --keep-ts ./servant-client-fetch ./servant-client-fetch
+  COPY --keep-ts ./servant-auth/servant-auth-lite ./servant-auth/servant-auth-lite
+  COPY --keep-ts ./servant-auth/servant-auth-cloudflare-workers ./servant-auth/servant-auth-cloudflare-workers
+  COPY --keep-ts ./servant-auth/servant-auth-lite-client ./servant-auth/servant-auth-lite-client
   CACHE --sharing shared --chmod 0777 --id=all#ghc-${GHC_VER}#global-store --persist /root/.ghc-wasm/.cabal/store
   CACHE --sharing=shared --chmod=0777 --id=all#ghc${GHC_VER}#dist-newstyle --persist dist-newstyle
   RUN ${CABAL} update --index-state=2024-10-17T07:25:36Z

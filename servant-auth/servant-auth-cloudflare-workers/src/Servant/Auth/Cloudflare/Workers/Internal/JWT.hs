@@ -5,7 +5,9 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
@@ -37,6 +39,7 @@ module Servant.Auth.Cloudflare.Workers.Internal.JWT (
   toAlogirhtmIdentifier,
 ) where
 
+import Control.Arrow ((&&&))
 import Control.Exception.Safe (throwString)
 import Control.Monad (MonadPlus (..), guard, unless, when, (<=<))
 import Control.Monad.Except (ExceptT (ExceptT), runExceptT)
@@ -53,7 +56,7 @@ import qualified Data.ByteString.Base64.URL as B64
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.CaseInsensitive as CI
 import Data.Foldable (forM_)
-import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
@@ -472,9 +475,46 @@ data AlgorithmParams = AlgorithmParams
   deriving (Show, Eq, Ord, Generic)
   deriving anyclass (FromJSON)
 
-newtype Keys = Keys {keys :: HashMap T.Text J.Value}
+newtype Keys = Keys {keys :: [CloudflarePubKey]}
   deriving (Generic)
   deriving anyclass (J.FromJSON)
+
+data CloudflarePubKey = CloudflarePubKey
+  { keyId :: T.Text
+  , pubkeyN :: BigEndian
+  , pubkeyE :: BigEndian
+  }
+  deriving (Show, Eq, Ord, Generic)
+
+data CloudflareCerts = CloudflareCerts {keys :: [CloudflarePubKey]}
+  deriving (Show, Eq, Ord, Generic)
+  deriving anyclass (FromJSON)
+
+newtype BigEndian = BigEndian {rawBE :: T.Text}
+  deriving (Show, Eq, Ord, Generic)
+  deriving newtype (FromJSON, J.ToJSON)
+
+-- | In JWK Format
+instance FromJSON CloudflarePubKey where
+  parseJSON = J.withObject "JWK" \dic -> do
+    keyId <- dic J..: "kid"
+    "RSA" :: T.Text <- dic J..: "kty"
+    RS256 <- dic J..: "alg"
+    "sig" :: T.Text <- dic J..: "use"
+    pubkeyN <- dic J..: "n"
+    pubkeyE <- dic J..: "e"
+    pure CloudflarePubKey {keyId, pubkeyN, pubkeyE}
+
+instance J.ToJSON CloudflarePubKey where
+  toJSON CloudflarePubKey {..} =
+    J.object
+      [ "kid" J..= keyId
+      , "kty" J..= ("RSA" :: T.Text)
+      , "alg" J..= ("RS256" :: T.Text)
+      , "use" J..= ("sig" :: T.Text)
+      , "n" J..= pubkeyN
+      , "e" J..= pubkeyE
+      ]
 
 defaultCloudflareZeroTrustSettings ::
   Maybe AudienceId ->
@@ -485,7 +525,13 @@ defaultCloudflareZeroTrustSettings cfAudienceId teamName = do
     rsp <-
       await
         =<< Fetch.get ("https://" <> team <> ".cloudflareaccess.com/cdn-cgi/access/certs")
-    either throwString (mapM (toCryptoKey RS256 . unsafeCast <=< encodeJSON) . (.keys))
+    either
+      throwString
+      ( mapM (toCryptoKey RS256 . unsafeCast <=< encodeJSON)
+          . HM.fromList
+          . map ((.keyId) &&& id)
+          . (.keys)
+      )
       . eitherResult
       . fromJSON @Keys
       . fst
