@@ -91,11 +91,11 @@ cloudflareZeroTrustAuthCheck ::
 cloudflareZeroTrustAuthCheck sett = do
   let setts = toJWTSettings sett
   req <- ask
-  token <- maybe (liftIO $ throwString "No JWT token found") pure $ do
+  token <- maybe (fail "Cf-Access-Jwt-Assertion HEADER not given") pure $ do
     lookup "Cf-Access-Jwt-Assertion" $
       map (Bi.first CI.mk) $
         Req.getHeaders req.rawRequest
-  liftIO $ either throwString pure =<< verifyJWT setts token
+  liftIO $ either fail pure =<< verifyJWT setts token
 
 {- | A JWT @AuthCheck@. You likely won't need to use this directly unless you
 are protecting a @Raw@ endpoint.
