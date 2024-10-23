@@ -433,6 +433,7 @@ toCryptoKey alg jwk =
 detectAlgorithm :: CryptoKey -> Maybe JWSAlg
 detectAlgorithm key = do
   !rawAlg <- unsafePerformIO $ decodeJSON @AlgorithmParams =<< CryptoKey.js_get_algorithm key
+  !() <- pure $ unsafePerformIO $ consoleLog $ fromText $ T.pack $ "Raw Algorithm: " <> show rawAlg
   case rawAlg.name of
     "HMAC" -> do
       hash <- rawAlg.hash
@@ -542,3 +543,6 @@ defaultCloudflareZeroTrustSettings cfAudienceId teamName = do
         . fromNullable
       =<< Resp.js_get_body rsp
   pure CloudflareZeroTrustSettings {..}
+
+foreign import javascript unsafe "console.log($1)"
+  consoleLog :: USVString -> IO ()
