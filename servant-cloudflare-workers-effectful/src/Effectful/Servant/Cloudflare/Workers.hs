@@ -18,6 +18,7 @@ module Effectful.Servant.Cloudflare.Workers (
   getRoutingRequest,
   getRawRequest,
   earlyReturn,
+  serverError,
 
   -- * Type synonyms to avoid collisions
   type (/>),
@@ -72,6 +73,9 @@ module Effectful.Servant.Cloudflare.Workers (
   err503,
   err504,
   err505,
+
+  -- ** Effectful
+  Eff,
 ) where
 
 import Control.Exception.Safe (Exception, displayException, fromException, handleAny, throwIO, throwString)
@@ -80,6 +84,7 @@ import Control.Monad.Reader.Class qualified as MTL
 import Control.Monad.Trans.Writer.Strict qualified as MTL
 import Data.Aeson (FromJSON, Value, fromJSON)
 import Data.Aeson qualified as A
+import Data.Monoid (Ap (..))
 import Data.Text qualified as T
 import Data.Text.Lazy qualified as LT
 import Data.Text.Lazy.Encoding qualified as LTE
@@ -96,6 +101,7 @@ import Network.Cloudflare.Worker.Binding qualified as B
 import Network.Cloudflare.Worker.Handler (Handlers (..), toJSHandlers)
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
+import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.API qualified as Servant
 import Servant.Cloudflare.Workers qualified as Servant
 import Servant.Cloudflare.Workers.Internal.Handler (
@@ -206,14 +212,19 @@ data instance StaticRep (ServantWorker e)
 newtype ReturnId = ReturnId {retId :: DU.Unique}
   deriving (Eq, Ord)
 
-earlyReturn :: forall e es. (ServantWorker e ∈ es) => RoutingResponse -> Eff es ()
+earlyReturn :: forall e es a. (ServantWorker e ∈ es) => RoutingResponse -> Eff es a
 earlyReturn resp = do
   rep <- getStaticRep @(ServantWorker e)
   throwIO $ EarlyReturn rep.returnId $ Response resp
 
-addFinaliser :: forall e es. (ServantWorker e ∈ es) => Finaliser -> Eff es ()
+serverError :: forall e es a. (ServantWorker e ∈ es) => ServerError -> Eff es a
+serverError err = do
+  rep <- getStaticRep @(ServantWorker e)
+  throwIO $ EarlyReturn rep.returnId $ Error err
+
+addFinaliser :: forall e es. (ServantWorker e ∈ es) => (WorkerResponse -> IO ()) -> Eff es ()
 addFinaliser fin = stateStaticRep @(ServantWorker e) $ \rep ->
-  ((), rep {finaliser = rep.finaliser <> fin})
+  ((), rep {finaliser = rep.finaliser <> (Ap . fin)})
 
 data EarlyReturn = EarlyReturn !ReturnId !ServerReturn
   deriving (Generic)

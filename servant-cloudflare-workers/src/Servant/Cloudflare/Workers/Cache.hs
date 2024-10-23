@@ -11,6 +11,7 @@ module Servant.Cloudflare.Workers.Cache (
   -- * Raw-level combinators
   serveCachedIO,
   retrieveCache,
+  saveCache,
   CacheKeyRequest (..),
 ) where
 
@@ -53,20 +54,8 @@ serveCached copts = do
   HandlerEnv {..} <- ask
   liftIO (retrieveCache copts request.rawRequest) >>= \case
     Right resp -> earlyReturn $ RawResponse resp
-    Left keyReq -> do
-      addFinaliser \resp -> do
-        code <- Resp.getStatus resp
-        when (not (onlyOk copts) || code == 200) do
-          respHdrs0 <- Resp.getHeaders resp
-          cacheControlHdr <- fromHaskellByteString "Cache-Control"
-          cacheControl <-
-            fromHaskellByteString $
-              "public, max-age=" <> BS8.pack (show (cacheTTL copts))
-          Headers.js_fun_set_ByteString_ByteString_undefined
-            respHdrs0
-            cacheControlHdr
-            cacheControl
-          waitUntil fetchContext =<< Cache.put keyReq.cacheKeyRequest resp
+    Left keyReq ->
+      addFinaliser $ saveCache copts fetchContext keyReq
 
 serveCachedRaw :: CacheOptions -> WorkerT e Raw m -> WorkerT e Raw m
 serveCachedRaw opts (Tagged app) = Tagged \req env fctx ->
@@ -88,20 +77,23 @@ serveCachedIO opts req ctx act = do
     Right resp -> pure resp
     Left keyReq -> do
       resp <- act
-      code <- Resp.getStatus resp
-      when (not opts.onlyOk && code == 200) do
-        respHdrs0 <- Resp.getHeaders resp
-        cacheControlHdr <- fromHaskellByteString "Cache-Control"
-        cacheControl <-
-          fromHaskellByteString $
-            "public, max-age=" <> BS8.pack (show opts.cacheTTL)
-        Headers.js_fun_set_ByteString_ByteString_undefined
-          respHdrs0
-          cacheControlHdr
-          cacheControl
-        Resp.setHeaders resp respHdrs0
-        waitUntil ctx =<< Cache.put keyReq.cacheKeyRequest resp
+      saveCache opts ctx keyReq resp
       pure resp
+
+saveCache :: CacheOptions -> FetchContext -> CacheKeyRequest -> WorkerResponse -> IO ()
+saveCache opts ctx keyReq resp = do
+  code <- Resp.getStatus resp
+  when (not opts.onlyOk || code == 200) do
+    respHdrs0 <- Resp.getHeaders resp
+    cacheControlHdr <- fromHaskellByteString "Cache-Control"
+    cacheControl <-
+      fromHaskellByteString $
+        "public, max-age=" <> BS8.pack (show opts.cacheTTL)
+    Headers.js_fun_set_ByteString_ByteString_undefined
+      respHdrs0
+      cacheControlHdr
+      cacheControl
+    waitUntil ctx =<< Cache.put keyReq.cacheKeyRequest resp
 
 newtype CacheKeyRequest = CacheKeyRequest {cacheKeyRequest :: WorkerRequest}
 
