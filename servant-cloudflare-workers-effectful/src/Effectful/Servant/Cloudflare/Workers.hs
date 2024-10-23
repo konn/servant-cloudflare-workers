@@ -96,7 +96,7 @@ module Effectful.Servant.Cloudflare.Workers (
   Eff,
 ) where
 
-import Control.Exception.Safe (Exception, displayException, fromException, handleAny, throwIO, throwString)
+import Control.Exception.Safe (Exception, displayException, fromException, handleAny, throwIO, throwString, tryAny)
 import Control.Monad.Error.Class qualified as MTL
 import Control.Monad.Reader.Class qualified as MTL
 import Control.Monad.Trans.Writer.Strict qualified as MTL
@@ -131,8 +131,9 @@ import Servant.Cloudflare.Workers.Internal.Handler (
   HandlerEnv (..),
   ServerReturn (..),
  )
-import Servant.Cloudflare.Workers.Internal.Response (RoutingResponse (..))
+import Servant.Cloudflare.Workers.Internal.Response (RoutingResponse (..), toWorkerResponse)
 import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest (..))
+import Servant.Cloudflare.Workers.Internal.ServerError (responseServerError)
 import Servant.Cloudflare.Workers.Prelude (
   Context (EmptyContext),
   FetchHandler,
@@ -227,8 +228,11 @@ compileWorkerContext ctx act = runEff $ unsafeEff \es ->
   toJSHandlers
     Handlers
       { fetch = \req env fctx -> do
-          workCtx <- ctx env fctx
-          runWorkerContext @e @api es workCtx act req env fctx
+          ectx <- tryAny $ ctx env fctx
+          case ectx of
+            Right workCtx -> runWorkerContext @e @api es workCtx act req env fctx
+            Left exc ->
+              toWorkerResponse $ responseServerError err500 {errBody = "Internal server error: " <> LTE.encodeUtf8 (LT.pack $ displayException exc)}
       }
 
 genericCompileWorkerContext ::
