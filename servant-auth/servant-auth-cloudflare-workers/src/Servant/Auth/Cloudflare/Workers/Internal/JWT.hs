@@ -473,11 +473,8 @@ detectAlgorithm key = do
 
 data AlgorithmParams = AlgorithmParams
   { name :: T.Text
-  , modulusLength :: !(Maybe Word)
-  , publicExponent :: !(Maybe Word)
   , hash :: !(Maybe HashAlg)
   , namedCurve :: !(Maybe T.Text)
-  , length :: !(Maybe Word)
   }
   deriving (Show, Eq, Ord, Generic)
   deriving anyclass (FromJSON)
