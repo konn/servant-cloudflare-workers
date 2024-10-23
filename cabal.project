@@ -15,8 +15,8 @@ packages:
 -- packages:
 --   servant-jsaddle/
 
-tests: False
 optimization: False
+tests: False
 
 -- Development flags
 package *
