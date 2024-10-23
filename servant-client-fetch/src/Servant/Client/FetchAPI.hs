@@ -30,6 +30,7 @@ import Data.Map.Strict qualified as Map
 import Data.Monoid
 import Data.Sequence qualified as Seq
 import Data.Text.Encoding qualified as TE
+import Data.Word (Word8)
 import GHC.Generics (Generic)
 import GHC.Wasm.Object.Builtins
 import GHC.Wasm.Prim
@@ -130,9 +131,11 @@ instance (MonadIO m) => RunClient (FetchT m) where
 
 fromBody :: Servant.RequestBody -> IO BodyInit
 fromBody (Servant.RequestBodyLBS lbs) =
-  fmap inject $ toReadableStream $ Q.fromLazy lbs
+  useByteStringAsJSByteArray @Word8 (LBS.toStrict lbs) \bs ->
+    pure $ inject bs
 fromBody (Servant.RequestBodyBS bs) =
-  fmap inject $ toReadableStream $ Q.fromStrict bs
+  useByteStringAsJSByteArray @Word8 bs \bs' ->
+    pure $ inject bs'
 fromBody (Servant.RequestBodySource src) =
   fmap inject $ toReadableStream (fromSourceIOLBS src)
 
