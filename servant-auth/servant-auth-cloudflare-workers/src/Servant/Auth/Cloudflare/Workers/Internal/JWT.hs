@@ -3,6 +3,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -52,7 +53,7 @@ import qualified Data.ByteString.Base64.URL as B64
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.CaseInsensitive as CI
 import Data.Foldable (forM_)
-import qualified Data.HashMap.Strict as HM
+import Data.HashMap.Strict (HashMap)
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
@@ -471,6 +472,10 @@ data AlgorithmParams = AlgorithmParams
   deriving (Show, Eq, Ord, Generic)
   deriving anyclass (FromJSON)
 
+newtype Keys = Keys {keys :: HashMap T.Text J.Value}
+  deriving (Generic)
+  deriving anyclass (J.FromJSON)
+
 defaultCloudflareZeroTrustSettings ::
   AudienceId ->
   TeamName ->
@@ -480,9 +485,9 @@ defaultCloudflareZeroTrustSettings cfAudienceId teamName = do
     await
       =<< Fetch.get ("https://" <> teamName <> ".cloudflareaccess.com/cdn-cgi/access/certs")
   val <-
-    either throwString (mapM encodeJSON)
+    either throwString (mapM encodeJSON . (.keys))
       . eitherResult
-      . fromJSON @(HM.HashMap T.Text J.Value)
+      . fromJSON @Keys
       . fst
       =<< bitraverse (either (throwString . show) pure) Q.effects
       =<< maybe
