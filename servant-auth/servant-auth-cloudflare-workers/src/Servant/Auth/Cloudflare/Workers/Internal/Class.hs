@@ -3,7 +3,6 @@
 module Servant.Auth.Cloudflare.Workers.Internal.Class where
 
 import Data.Kind (Type)
-import GHC.Wasm.Object.Builtins (Prototype)
 import Servant.Auth
 import Servant.Auth.Cloudflare.Workers.Internal.BasicAuth
 import Servant.Auth.Cloudflare.Workers.Internal.ConfigTypes
@@ -16,45 +15,45 @@ import Servant.Cloudflare.Workers.Prelude hiding (BasicAuth)
 elements of @ctx@ to be the in the Context and whose authentication check
 returns an @AuthCheck v@.
 -}
-class IsAuth (e :: Prototype) a v where
-  type AuthArgs e a :: [Type]
-  runAuth :: proxy' e -> proxy a -> proxy v -> Unapp (AuthArgs e a) (AuthCheck e v)
+class IsAuth a v where
+  type AuthArgs a :: [Type]
+  runAuth :: proxy a -> proxy v -> Unapp (AuthArgs a) (AuthCheck v)
 
-instance (FromJWT usr) => IsAuth e JWT usr where
-  type AuthArgs e JWT = '[JWTSettings e]
-  runAuth _ _ _ = jwtAuthCheck
+instance (FromJWT usr) => IsAuth JWT usr where
+  type AuthArgs JWT = '[JWTSettings]
+  runAuth _ _ = jwtAuthCheck
 
-instance (FromBasicAuthData usr) => IsAuth e BasicAuth usr where
-  type AuthArgs e BasicAuth = '[BasicAuthCfg]
-  runAuth _ _ _ = basicAuthCheck
+instance (FromBasicAuthData usr) => IsAuth BasicAuth usr where
+  type AuthArgs BasicAuth = '[BasicAuthCfg]
+  runAuth _ _ = basicAuthCheck
 
-instance (FromJWT usr) => IsAuth e CloudflareZeroTrust usr where
-  type AuthArgs e CloudflareZeroTrust = '[CloudflareZeroTrustSettings e]
-  runAuth _ _ _ = cloudflareZeroTrustAuthCheck
+instance (FromJWT usr) => IsAuth CloudflareZeroTrust usr where
+  type AuthArgs CloudflareZeroTrust = '[CloudflareZeroTrustSettings]
+  runAuth _ _ = cloudflareZeroTrustAuthCheck
 
 -- * Helper
 
-class AreAuths (e :: Prototype) (as :: [Type]) (ctxs :: [Type]) v where
-  runAuths :: proxy as -> Context ctxs -> AuthCheck e v
+class AreAuths (as :: [Type]) (ctxs :: [Type]) v where
+  runAuths :: proxy as -> Context ctxs -> AuthCheck v
 
-instance AreAuths e '[] ctxs v where
+instance AreAuths '[] ctxs v where
   runAuths _ _ = mempty
 
 instance
-  ( AuthCheck e v ~ App (AuthArgs e a) (Unapp (AuthArgs e a) (AuthCheck e v))
-  , IsAuth e a v
-  , AreAuths e as ctxs v
-  , AppCtx ctxs (AuthArgs e a) (Unapp (AuthArgs e a) (AuthCheck e v))
+  ( AuthCheck v ~ App (AuthArgs a) (Unapp (AuthArgs a) (AuthCheck v))
+  , IsAuth a v
+  , AreAuths as ctxs v
+  , AppCtx ctxs (AuthArgs a) (Unapp (AuthArgs a) (AuthCheck v))
   ) =>
-  AreAuths e (a ': as) ctxs v
+  AreAuths (a ': as) ctxs v
   where
   runAuths _ ctxs = go <> runAuths (Proxy :: Proxy as) ctxs
     where
       go =
         appCtx
-          (Proxy :: Proxy (AuthArgs e a))
+          (Proxy :: Proxy (AuthArgs a))
           ctxs
-          (runAuth (Proxy :: Proxy e) (Proxy :: Proxy a) (Proxy :: Proxy v))
+          (runAuth (Proxy :: Proxy a) (Proxy :: Proxy v))
 
 type family Unapp ls res where
   Unapp '[] res = res

@@ -71,7 +71,6 @@ import GHC.Wasm.Web.JSON (decodeJSON, encodeJSON)
 import GHC.Wasm.Web.ReadableStream (fromReadableStream)
 import Network.Cloudflare.Worker.Crypto (subtleCrypto)
 import qualified Network.Cloudflare.Worker.FetchAPI as Fetch
-import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import qualified Network.Cloudflare.Worker.Request as Req
 import Servant.Auth.Cloudflare.Workers.Internal.ConfigTypes
 import Servant.Auth.Cloudflare.Workers.Internal.Types
@@ -86,36 +85,30 @@ A @AuthCheck@ for Cloudflare ZeroTrust. You likely won't need to use this direct
 -}
 cloudflareZeroTrustAuthCheck ::
   (FromJWT usr, HasCallStack) =>
-  CloudflareZeroTrustSettings e ->
-  AuthCheck e usr
-cloudflareZeroTrustAuthCheck CloudflareZeroTrustSettings {..} = do
-  let setts =
-        JWTSettings
-          { validationKeys = \env fctx ->
-              map (Bi.first Just) . HM.toList <$> cfValidationKeys env fctx
-          , audienceMatches = \aud ->
-              if cfAudienceId == aud then Matches else DoesNotMatch
-          }
-  (req, env, ctx) <- ask
+  CloudflareZeroTrustSettings ->
+  AuthCheck usr
+cloudflareZeroTrustAuthCheck sett = do
+  let setts = toJWTSettings sett
+  req <- ask
   token <- maybe (liftIO $ throwString "No JWT token found") pure $ do
     lookup "Cf-Access-Jwt-Assertion" $
       map (Bi.first CI.mk) $
         Req.getHeaders req.rawRequest
-  liftIO $ either throwString pure =<< verifyJWT setts env ctx token
+  liftIO $ either throwString pure =<< verifyJWT setts token
 
 {- | A JWT @AuthCheck@. You likely won't need to use this directly unless you
 are protecting a @Raw@ endpoint.
 -}
-jwtAuthCheck :: (FromJWT usr) => JWTSettings e -> AuthCheck e usr
+jwtAuthCheck :: (FromJWT usr) => JWTSettings -> AuthCheck usr
 jwtAuthCheck jwtSettings = do
-  (req, env, fctx) <- ask
+  req <- ask
   token <- maybe mempty pure $ do
     authHdr <- lookup "Authorization" $ Req.getHeaders req.rawRequest
     let bearer = "Bearer "
         (mbearer, rest) = BS.splitAt (BS.length bearer) authHdr
     guard (mbearer == bearer)
     pure rest
-  verifiedJWT <- liftIO $ verifyJWT jwtSettings env fctx token
+  verifiedJWT <- liftIO $ verifyJWT jwtSettings token
   case verifiedJWT of
     Left {} -> mzero
     Right v -> pure v
@@ -162,19 +155,18 @@ validateRawJSON raw =
     then Left "JSON contains whitespaces"
     else Right ()
 
-verifyJWT :: (FromJWT a) => JWTSettings e -> JSObject e -> FetchContext -> BS.ByteString -> IO (Either String a)
-verifyJWT jwtCfg e ctx input = runExceptT do
+verifyJWT :: (FromJWT a) => JWTSettings -> BS.ByteString -> IO (Either String a)
+verifyJWT jwtCfg input = runExceptT do
   now <- liftIO getPOSIXTime
-  keys <- liftIO $ jwtCfg.validationKeys e ctx
   rawJWT <-
     ExceptT $
       pure $
-        verifyJWTWith keys now
+        verifyJWTWith jwtCfg.validationKeys now
           =<< parseJWT input
   verified <- verifyClaims jwtCfg rawJWT
   ExceptT $ pure $ Bi.first T.unpack $ decodeJWT verified
 
-verifyClaims :: JWTSettings e -> JWT -> ExceptT String IO ClaimsSet
+verifyClaims :: JWTSettings -> JWT -> ExceptT String IO ClaimsSet
 verifyClaims jwtCfg jwt = do
   let audMatches = jwtCfg.audienceMatches
   liftIO $ do
@@ -482,7 +474,7 @@ data AlgorithmParams = AlgorithmParams
 defaultCloudflareZeroTrustSettings ::
   AudienceId ->
   TeamName ->
-  IO (CloudflareZeroTrustSettings e)
+  IO CloudflareZeroTrustSettings
 defaultCloudflareZeroTrustSettings cfAudienceId teamName = do
   rsp <-
     await
@@ -498,8 +490,5 @@ defaultCloudflareZeroTrustSettings cfAudienceId teamName = do
         (AQ.parse AA.json' . fromReadableStream)
         . fromNullable
       =<< Resp.js_get_body rsp
-  keys <-
-    forM val $
-      toCryptoKey RS256 . unsafeCast
-  let cfValidationKeys = const $ const $ pure keys
+  cfValidationKeys <- forM val $ toCryptoKey RS256 . unsafeCast
   pure CloudflareZeroTrustSettings {..}

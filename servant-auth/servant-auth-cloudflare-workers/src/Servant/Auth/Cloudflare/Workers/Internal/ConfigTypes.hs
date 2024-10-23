@@ -24,7 +24,6 @@ import GHC.Generics (Generic)
 import GHC.Wasm.Object.Builtins
 import GHC.Wasm.Web.Generated.CryptoKey (CryptoKey)
 import GHC.Wasm.Web.Generated.JsonWebKey.Core (JsonWebKey)
-import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Servant.API (IsSecure (..))
 import Servant.Auth.JWT
 
@@ -43,8 +42,8 @@ data SameSite = AnySite | SameSiteStrict | SameSiteLax
   deriving (Eq, Show, Read, Generic, Ord)
 
 -- | @JWTSettings@ are used to generate cookies, and to verify JWTs.
-data JWTSettings e = JWTSettings
-  { validationKeys :: JSObject e -> FetchContext -> IO [(Maybe T.Text, CryptoKey)]
+data JWTSettings = JWTSettings
+  { validationKeys :: [(Maybe T.Text, CryptoKey)]
   -- ^ Keys used to validate JWT.
   , audienceMatches :: T.Text -> IsMatch
   -- ^ An @aud@ predicate. The @aud@ is a string or URI that identifies the
@@ -53,10 +52,10 @@ data JWTSettings e = JWTSettings
   deriving (Generic)
 
 -- | A @JWTSettings@ where the audience always matches.
-defaultJWTSettings :: CryptoKey -> JWTSettings e
+defaultJWTSettings :: CryptoKey -> JWTSettings
 defaultJWTSettings k =
   JWTSettings
-    { validationKeys = const $ const $ pure [(Nothing, k)]
+    { validationKeys = [(Nothing, k)]
     , audienceMatches = const Matches
     }
 
@@ -131,16 +130,16 @@ defaultXsrfCookieSettings =
     , xsrfExcludeGet = False
     }
 
-data CloudflareZeroTrustSettings e = CloudflareZeroTrustSettings
+data CloudflareZeroTrustSettings = CloudflareZeroTrustSettings
   { cfAudienceId :: T.Text
-  , cfValidationKeys :: JSObject e -> FetchContext -> IO (HashMap T.Text CryptoKey)
+  , cfValidationKeys :: HashMap T.Text CryptoKey
   }
   deriving (Generic)
 
-toJWTSettings :: CloudflareZeroTrustSettings e -> JWTSettings e
+toJWTSettings :: CloudflareZeroTrustSettings -> JWTSettings
 toJWTSettings CloudflareZeroTrustSettings {..} =
   JWTSettings
-    { validationKeys = \env fctx -> map (Bi.first Just) . HM.toList <$> cfValidationKeys env fctx
+    { validationKeys = map (Bi.first Just) $ HM.toList cfValidationKeys
     , audienceMatches = \aud -> if aud == cfAudienceId then Matches else DoesNotMatch
     }
 
