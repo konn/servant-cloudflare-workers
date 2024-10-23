@@ -62,6 +62,7 @@ library
     Effectful.Servant.Cloudflare.Workers.Assets
     Effectful.Servant.Cloudflare.Workers.Cache
     Effectful.Servant.Cloudflare.Workers.D1
+    Effectful.Servant.Cloudflare.Workers.KV
     Effectful.Servant.Cloudflare.Workers.R2
 
   build-depends:
