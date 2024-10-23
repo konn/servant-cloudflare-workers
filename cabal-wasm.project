@@ -9,8 +9,8 @@ packages:
   servant-auth/servant-auth-lite-client
 optimization: False
 active-repositories: hackage.haskell.org
-semaphore: True
 jobs: $ncpus
+semaphore: True
 
 source-repository-package
   type: git

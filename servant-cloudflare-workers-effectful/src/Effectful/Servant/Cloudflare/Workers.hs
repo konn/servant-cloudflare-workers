@@ -1,5 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Effectful.Servant.Cloudflare.Workers (
   ServantWorker,
@@ -7,12 +9,15 @@ module Effectful.Servant.Cloudflare.Workers (
   compileWorkerWithContext,
   runWorker,
   runWorkerWithContext,
+  HasUniqueWorkerWith,
+  HasUniqueWorker,
 
   -- * Interaction with the worker environment
   getEnvRaw,
   getEnv,
   getSecret,
   getBinding,
+  withBinding,
   getFetchContext,
   getBindings,
   getRoutingRequest,
@@ -29,6 +34,9 @@ module Effectful.Servant.Cloudflare.Workers (
   interpretWorker,
 
   -- * Re-exports
+  B.Member,
+  B.ListMember,
+  B.Lookup',
   JSObject (..),
   Proxy (..),
   Handler (..),
@@ -84,6 +92,7 @@ import Control.Monad.Reader.Class qualified as MTL
 import Control.Monad.Trans.Writer.Strict qualified as MTL
 import Data.Aeson (FromJSON, Value, fromJSON)
 import Data.Aeson qualified as A
+import Data.Kind (Constraint)
 import Data.Monoid (Ap (..))
 import Data.Text qualified as T
 import Data.Text.Lazy qualified as LT
@@ -94,6 +103,7 @@ import Effectful qualified
 import Effectful.Dispatch.Static
 import Effectful.Dispatch.Static.Primitive (Env, cloneEnv)
 import GHC.Generics (Generic)
+import GHC.TypeError
 import GHC.TypeLits (KnownSymbol)
 import GHC.Wasm.Object.Builtins (JSObject (..), Prototype)
 import Network.Cloudflare.Worker.Binding (BindingsClass)
@@ -212,17 +222,17 @@ data instance StaticRep (ServantWorker e)
 newtype ReturnId = ReturnId {retId :: DU.Unique}
   deriving (Eq, Ord)
 
-earlyReturn :: forall e es a. (ServantWorker e ∈ es) => RoutingResponse -> Eff es a
+earlyReturn :: forall e es a. (HasUniqueWorkerWith e es) => RoutingResponse -> Eff es a
 earlyReturn resp = do
   rep <- getStaticRep @(ServantWorker e)
   throwIO $ EarlyReturn rep.returnId $ Response resp
 
-serverError :: forall e es a. (ServantWorker e ∈ es) => ServerError -> Eff es a
+serverError :: forall e es a. (HasUniqueWorkerWith e es) => ServerError -> Eff es a
 serverError err = do
   rep <- getStaticRep @(ServantWorker e)
   throwIO $ EarlyReturn rep.returnId $ Error err
 
-addFinaliser :: forall e es. (ServantWorker e ∈ es) => (WorkerResponse -> IO ()) -> Eff es ()
+addFinaliser :: forall e es. (HasUniqueWorkerWith e es) => (WorkerResponse -> IO ()) -> Eff es ()
 addFinaliser fin = stateStaticRep @(ServantWorker e) $ \rep ->
   ((), rep {finaliser = rep.finaliser <> (Ap . fin)})
 
@@ -281,22 +291,22 @@ interpretWorker env act = do
     unEff (runServantWorker request bindings fetchContext act) env'
   either (Handler . MTL.liftEither . Left) (Handler . MTL.WriterT . pure) v
 
-getFetchContext :: forall e es. (ServantWorker e ∈ es) => Eff es FetchContext
+getFetchContext :: forall e es. (HasUniqueWorkerWith e es) => Eff es FetchContext
 getFetchContext = do
   rep <- getStaticRep @(ServantWorker e)
   pure rep.fetchContext
 
-getBindings :: forall e es. (ServantWorker e ∈ es) => Eff es (JSObject e)
+getBindings :: forall e es. (HasUniqueWorkerWith e es) => Eff es (JSObject e)
 getBindings = do
   rep <- getStaticRep @(ServantWorker e)
   pure rep.workerEnv
 
-getRoutingRequest :: forall e es. (ServantWorker e ∈ es) => Eff es RoutingRequest
+getRoutingRequest :: forall e es. (HasUniqueWorkerWith e es) => Eff es RoutingRequest
 getRoutingRequest = do
   rep <- getStaticRep @(ServantWorker e)
   pure rep.request
 
-getRawRequest :: forall e es. (ServantWorker e ∈ es) => Eff es WorkerRequest
+getRawRequest :: forall e es. (HasUniqueWorkerWith e es) => Eff es WorkerRequest
 getRawRequest = do
   req <- getRoutingRequest @e
   pure req.rawRequest
@@ -305,7 +315,7 @@ getEnvRaw ::
   forall vs ss bs es.
   forall l ->
   ( KnownSymbol l
-  , ServantWorker (BindingsClass vs ss bs) ∈ es
+  , HasUniqueWorkerWith (BindingsClass vs ss bs) es
   , B.ListMember l vs
   ) =>
   Eff es Value
@@ -315,7 +325,7 @@ getEnv ::
   forall vs ss bs a es.
   forall l ->
   ( KnownSymbol l
-  , ServantWorker (BindingsClass vs ss bs) ∈ es
+  , HasUniqueWorkerWith (BindingsClass vs ss bs) es
   , B.ListMember l vs
   , FromJSON a
   , HasCallStack
@@ -333,7 +343,7 @@ getSecret ::
   forall vs ss bs es.
   forall l ->
   ( KnownSymbol l
-  , ServantWorker (BindingsClass vs ss bs) ∈ es
+  , HasUniqueWorkerWith (BindingsClass vs ss bs) es
   , B.ListMember l ss
   ) =>
   Eff es T.Text
@@ -342,9 +352,59 @@ getSecret l = B.getSecret l <$> getBindings @(BindingsClass vs ss bs)
 getBinding ::
   forall vs ss bs es a.
   forall l ->
-  ( ServantWorker (BindingsClass vs ss bs) ∈ es
+  ( HasUniqueWorkerWith (BindingsClass vs ss bs) es
   , B.Member l bs
   , B.Lookup' l bs ~ a
   ) =>
   Eff es (JSObject a)
 getBinding l = B.getBinding l <$> getBindings @(BindingsClass vs ss bs)
+
+withBinding ::
+  forall vs ss bs es a x.
+  forall l ->
+  ( HasUniqueWorkerWith (BindingsClass vs ss bs) es
+  , B.Member l bs
+  , B.Lookup' l bs ~ x
+  ) =>
+  (JSObject x -> Eff es a) ->
+  Eff es a
+withBinding l = (=<< getBinding @vs @ss @bs l)
+
+type HasUniqueWorker :: [Effect] -> Constraint
+class (ServantWorker (WorkerEnvOf es) ∈ es) => HasUniqueWorker es
+
+type WorkerEnvOf es = WorkerEnvAux es es
+
+type family WorkerEnvAux (super :: [Effect]) (es :: [Effect]) where
+  WorkerEnvAux _ (ServantWorker e ': es) = e
+  WorkerEnvAux super (_ ': es) = WorkerEnvAux super es
+  WorkerEnvAux super '[] = TypeError ('Text "No ServantWorker found in a stack: " ':<>: 'ShowType super)
+
+type NoWorker es = NoWorkerAux es es
+
+type NoWorkerAux :: [Effect] -> [Effect] -> Constraint
+type family NoWorkerAux super cs where
+  NoWorkerAux super '[] = ()
+  NoWorkerAux super (ServantWorker e ': cs) = TypeError ('Text "No ServantWorker must be present in the stack but got: " ':<>: 'ShowType super)
+  NoWorkerAux super (_ ': cs) = NoWorkerAux super cs
+
+instance
+  ( Unsatisfiable ('Text "Exactly one worker constraint expected")
+  ) =>
+  HasUniqueWorker '[]
+
+instance
+  {-# OVERLAPPING #-}
+  ( NoWorker es
+  , WorkerEnvOf (ServantWorker e ': es) ~ e
+  ) =>
+  HasUniqueWorker (ServantWorker e ': es)
+
+instance
+  {-# OVERLAPPABLE #-}
+  ( HasUniqueWorker es
+  , WorkerEnvOf (e ': es) ~ WorkerEnvOf es
+  ) =>
+  HasUniqueWorker (e ': es)
+
+type HasUniqueWorkerWith e es = (WorkerEnvOf es ~ e, HasUniqueWorker es)

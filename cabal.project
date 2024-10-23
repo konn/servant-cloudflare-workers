@@ -1,6 +1,6 @@
 import: cabal-common.project
-semaphore: True
 multi-repl: True
+semaphore: True
 
 packages:
   servant-cloudflare-workers/
@@ -15,7 +15,7 @@ packages:
 -- packages:
 --   servant-jsaddle/
 
-tests: True
+tests: False
 optimization: False
 
 -- Development flags

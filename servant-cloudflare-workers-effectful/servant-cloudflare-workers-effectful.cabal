@@ -66,6 +66,7 @@ library
 
   build-depends:
     aeson,
+    bytestring,
     cloudflare-worker,
     effectful,
     effectful-core,
@@ -76,3 +77,5 @@ library
     servant-cloudflare-workers,
     text,
     transformers,
+    vector,
+    web-sys-hs,

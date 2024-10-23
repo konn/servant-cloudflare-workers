@@ -1,5 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-
 module Effectful.Servant.Cloudflare.Workers.Cache (
   CacheOptions (..),
   serveCached,
@@ -16,14 +14,14 @@ import Effectful.Servant.Cloudflare.Workers
 import Servant.Cloudflare.Workers.Cache (CacheOptions (..), retrieveCache, saveCache, serveCachedRaw, serveCachedRawM)
 
 serveCached ::
-  forall e es.
-  (ServantWorker e ∈ es) =>
+  forall es.
+  (HasUniqueWorker es) =>
   CacheOptions ->
   Eff es ()
 serveCached copts = do
-  rawReq <- getRawRequest @e
-  fctx <- getFetchContext @e
+  rawReq <- getRawRequest
+  fctx <- getFetchContext
   unsafeEff_ (retrieveCache copts rawReq) >>= \case
-    Right resp -> earlyReturn @e $ RawResponse resp
+    Right resp -> earlyReturn $ RawResponse resp
     Left keyReq ->
-      addFinaliser @e $ saveCache copts fctx keyReq
+      addFinaliser $ saveCache copts fctx keyReq
