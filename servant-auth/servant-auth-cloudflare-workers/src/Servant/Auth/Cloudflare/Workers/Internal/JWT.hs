@@ -39,6 +39,7 @@ module Servant.Auth.Cloudflare.Workers.Internal.JWT (
   toAlogirhtmIdentifier,
 ) where
 
+import Control.Applicative ((<|>))
 import Control.Arrow ((&&&))
 import Control.Exception.Safe (throwString)
 import Control.Monad (MonadPlus (..), guard, unless, when, (<=<))
@@ -58,6 +59,7 @@ import qualified Data.CaseInsensitive as CI
 import Data.Foldable (forM_)
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe (fromMaybe)
+import Data.String (IsString)
 import qualified Data.Text as T
 import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import Data.Traversable (forM)
@@ -473,12 +475,21 @@ data AlgorithmParams = AlgorithmParams
   { name :: T.Text
   , modulusLength :: !(Maybe Word)
   , publicExponent :: !(Maybe Word)
-  , hash :: !(Maybe T.Text)
+  , hash :: !(Maybe HashAlg)
   , namedCurve :: !(Maybe T.Text)
   , length :: !(Maybe Word)
   }
   deriving (Show, Eq, Ord, Generic)
   deriving anyclass (FromJSON)
+
+newtype HashAlg = HashAlg T.Text
+  deriving (Show, Eq, Ord, Generic)
+  deriving newtype (IsString)
+
+instance FromJSON HashAlg where
+  parseJSON inp =
+    HashAlg <$> J.parseJSON inp
+      <|> HashAlg <$> J.withObject "{name: ...}" (\obj -> obj J..: "name") inp
 
 newtype Keys = Keys {keys :: [CloudflarePubKey]}
   deriving (Generic)
