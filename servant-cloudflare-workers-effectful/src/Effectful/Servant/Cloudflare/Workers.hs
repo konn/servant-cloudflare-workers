@@ -9,10 +9,12 @@ module Effectful.Servant.Cloudflare.Workers (
   ServantWorker,
   compileWorker,
   genericCompileWorker,
-  compileWorkerWithContext,
-  genericCompileWorkerWithContext,
+  genericCompileWorkerWith,
+  compileWorkerContext,
+  genericCompileWorkerContext,
+  genericCompileWorkerContextWith,
   runWorker,
-  runWorkerWithContext,
+  runWorkerContext,
   HasUniqueWorkerWith,
   HasUniqueWorker,
 
@@ -121,6 +123,7 @@ import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.API qualified as Servant
+import Servant.Cloudflare.Workers (hoistWorker, hoistWorkerWithContext)
 import Servant.Cloudflare.Workers qualified as Servant
 import Servant.Cloudflare.Workers.Generic (AsWorker, AsWorkerT, genericWorkerT)
 import Servant.Cloudflare.Workers.Internal.Handler (
@@ -199,21 +202,36 @@ genericCompileWorker ::
   IO JSHandlers
 genericCompileWorker = compileWorker @e @(ToServantApi routes) . genericWorkerT @e @routes
 
-compileWorkerWithContext ::
+genericCompileWorkerWith ::
+  forall e es routes.
+  ( HasWorker e (ToServantApi routes) '[]
+  , GenericServant routes (AsWorkerT e (Eff es))
+  , ToServant routes (AsWorkerT e (Eff es))
+      ~ WorkerT e (ToServantApi routes) (Eff es)
+  ) =>
+  (forall a. Eff es a -> Eff '[ServantWorker e, IOE] a) ->
+  routes (AsWorkerT e (Eff es)) ->
+  IO JSHandlers
+genericCompileWorkerWith hoist =
+  compileWorker @e @(ToServantApi routes)
+    . hoistWorker @e @(ToServantApi routes) Proxy Proxy hoist
+    . genericWorkerT @e @routes
+
+compileWorkerContext ::
   forall e api ctx.
   (HasWorker e api ctx, WorkerContext ctx) =>
   (JSObject e -> FetchContext -> IO (Context ctx)) ->
   WorkerT e api (Eff '[ServantWorker e, IOE]) ->
   IO JSHandlers
-compileWorkerWithContext ctx act = runEff $ unsafeEff \es ->
+compileWorkerContext ctx act = runEff $ unsafeEff \es ->
   toJSHandlers
     Handlers
       { fetch = \req env fctx -> do
           workCtx <- ctx env fctx
-          runWorkerWithContext @e @api es workCtx act req env fctx
+          runWorkerContext @e @api es workCtx act req env fctx
       }
 
-genericCompileWorkerWithContext ::
+genericCompileWorkerContext ::
   forall e routes ctx.
   ( HasWorker e (ToServantApi routes) ctx
   , WorkerContext ctx
@@ -224,7 +242,24 @@ genericCompileWorkerWithContext ::
   (JSObject e -> FetchContext -> IO (Context ctx)) ->
   routes (AsWorkerT e (Eff '[ServantWorker e, IOE])) ->
   IO JSHandlers
-genericCompileWorkerWithContext ctx = compileWorkerWithContext @e @(ToServantApi routes) ctx . genericWorkerT @e @routes
+genericCompileWorkerContext ctx = compileWorkerContext @e @(ToServantApi routes) ctx . genericWorkerT @e @routes
+
+genericCompileWorkerContextWith ::
+  forall e es routes ctx.
+  ( HasWorker e (ToServantApi routes) ctx
+  , WorkerContext ctx
+  , GenericServant routes (AsWorkerT e (Eff es))
+  , ToServant routes (AsWorkerT e (Eff es))
+      ~ WorkerT e (ToServantApi routes) (Eff es)
+  ) =>
+  (forall a. Eff es a -> Eff '[ServantWorker e, IOE] a) ->
+  (JSObject e -> FetchContext -> IO (Context ctx)) ->
+  routes (AsWorkerT e (Eff es)) ->
+  IO JSHandlers
+genericCompileWorkerContextWith hoist ctx =
+  compileWorkerContext @e @(ToServantApi routes) ctx
+    . hoistWorkerWithContext @e @(ToServantApi routes) @ctx Proxy Proxy Proxy hoist
+    . genericWorkerT @e @routes
 
 runWorker ::
   forall e api.
@@ -232,9 +267,9 @@ runWorker ::
   WorkerT e api (Eff '[ServantWorker e, IOE]) ->
   FetchHandler e
 runWorker act req env fctx = runEff $ unsafeEff \es ->
-  runWorkerWithContext @e @api es EmptyContext act req env fctx
+  runWorkerContext @e @api es EmptyContext act req env fctx
 
-runWorkerWithContext ::
+runWorkerContext ::
   forall e api context es.
   ( HasWorker e api context
   , WorkerContext context
@@ -244,7 +279,7 @@ runWorkerWithContext ::
   Context context ->
   WorkerT e api (Eff (ServantWorker e ': es)) ->
   FetchHandler e
-runWorkerWithContext env ctx w =
+runWorkerContext env ctx w =
   Servant.serveWithContextT (Proxy @e) (Proxy @api) ctx (interpretWorker env) w
 
 data ServantWorker (e :: Prototype) :: Effect
