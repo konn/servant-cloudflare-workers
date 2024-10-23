@@ -144,13 +144,13 @@ import GHC.Wasm.Web.Generated.AlgorithmIdentifier (AlgorithmIdentifier)
 import GHC.Wasm.Web.Generated.SubtleCrypto (js_fun_generateKey_AlgorithmIdentifier_boolean_sequence_KeyUsage_Promise_any)
 import Network.Cloudflare.Worker.Crypto (subtleCrypto)
 import Servant.Auth
+import Servant.Auth.Cloudflare.Workers.Internal ()
 import Servant.Auth.Cloudflare.Workers.Internal.BasicAuth
 import Servant.Auth.Cloudflare.Workers.Internal.Class
 import Servant.Auth.Cloudflare.Workers.Internal.ConfigTypes
 import Servant.Auth.Cloudflare.Workers.Internal.JWT
 import Servant.Auth.Cloudflare.Workers.Internal.ThrowAll
 import Servant.Auth.Cloudflare.Workers.Internal.Types
-import Servant.Cloudflare.Workers.Internal ()
 import Servant.Cloudflare.Workers.Prelude (BasicAuthData (..))
 import Web.Cookie (SetCookie)
 import Prelude hiding (readFile, writeFile)
