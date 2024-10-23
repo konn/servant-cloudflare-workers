@@ -76,6 +76,7 @@ module Servant.Auth.Cloudflare.Workers (
   -- ** Settings
   JWTSettings (..),
   defaultJWTSettings,
+  toJWTSettings,
   CloudflareZeroTrustSettings (..),
   defaultCloudflareZeroTrustSettings,
 

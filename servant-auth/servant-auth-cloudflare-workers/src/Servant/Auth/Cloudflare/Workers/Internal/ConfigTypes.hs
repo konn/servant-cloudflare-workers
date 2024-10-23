@@ -13,9 +13,11 @@ module Servant.Auth.Cloudflare.Workers.Internal.ConfigTypes (
 ) where
 
 import qualified Data.Aeson as J
+import qualified Data.Bifunctor as Bi
 import qualified Data.ByteString as BS
 import Data.Default.Class
 import Data.HashMap.Internal.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import Data.Time
 import GHC.Generics (Generic)
@@ -134,6 +136,13 @@ data CloudflareZeroTrustSettings e = CloudflareZeroTrustSettings
   , cfValidationKeys :: JSObject e -> FetchContext -> IO (HashMap T.Text CryptoKey)
   }
   deriving (Generic)
+
+toJWTSettings :: CloudflareZeroTrustSettings e -> JWTSettings e
+toJWTSettings CloudflareZeroTrustSettings {..} =
+  JWTSettings
+    { validationKeys = \env fctx -> map (Bi.first Just) . HM.toList <$> cfValidationKeys env fctx
+    , audienceMatches = \aud -> if aud == cfAudienceId then Matches else DoesNotMatch
+    }
 
 type AudienceId = T.Text
 
