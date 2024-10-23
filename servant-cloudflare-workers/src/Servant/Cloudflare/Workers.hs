@@ -15,7 +15,7 @@ module Servant.Cloudflare.Workers (
   serve,
   serveWithContext,
   serveWithContextT,
-  ServerContext,
+  WorkerContext,
   JSHandlers,
   JSObject (..),
   compileWorker,
@@ -151,7 +151,7 @@ Typically, this will add default context entries to the context. You shouldn't t
 need to worry about these constraints, but if you write a helper function that wraps
 'serveWithContext', you might need to include this constraint.
 -}
-type ServerContext context =
+type WorkerContext context =
   ( HasContextEntry (context .++ DefaultErrorFormatters) ErrorFormatters
   )
 
@@ -189,7 +189,7 @@ but if you pass your own formatter, it will override the default one.
 -}
 serveWithContext ::
   ( HasWorker e api context
-  , ServerContext context
+  , WorkerContext context
   ) =>
   Proxy e ->
   Proxy api ->
@@ -203,7 +203,7 @@ apply on all routes.
 -}
 serveWithContextT ::
   forall e api context m.
-  (HasWorker e api context, ServerContext context) =>
+  (HasWorker e api context, WorkerContext context) =>
   Proxy e ->
   Proxy api ->
   Context context ->

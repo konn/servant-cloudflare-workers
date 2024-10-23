@@ -69,14 +69,14 @@ server = helloH :<|> postGreetH :<|> deleteGreetH :<|> otherRoutes
     cacheOpts = CacheOptions {cacheTTL = 60, onlyOk = True, includeQuery = True}
 
     bye name = pure $ "Bye, " <> name <> " !"
-    version = serveCached cacheOpts $ pure 42
+    version = 42 <$ serveCached cacheOpts
 
     helloH :: Text -> Maybe Bool -> Handler e Greet
-    helloH name mcapital =
+    helloH name mcapital = do
       serveCached cacheOpts
-        $ if fromMaybe False mcapital
-          then return . Greet . toUpper $ "Hello, " <> name
-          else return . Greet $ "Hello, " <> name
+      if fromMaybe False mcapital
+        then return . Greet . toUpper $ "Hello, " <> name
+        else return . Greet $ "Hello, " <> name
 
     postGreetH greet = return greet
 

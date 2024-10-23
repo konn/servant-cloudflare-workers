@@ -1,0 +1,78 @@
+cabal-version: 3.4
+name: servant-cloudflare-workers-effectful
+version: 0.1.0.0
+description: Please see the README on GitHub at <https://github.com/konn/servant-cloudflare-workers-effectful#readme>
+homepage: https://github.com/konn/servant-cloudflare-workers-effectful#readme
+bug-reports: https://github.com/konn/servant-cloudflare-workers-effectful/issues
+author: Hiromi ISHII
+maintainer: konn.jinro_at_gmail.com
+copyright: 2024 (c) Hiromi ISHII
+license: BSD-3-Clause
+license-file: LICENSE
+build-type: Simple
+extra-doc-files:
+  CHANGELOG.md
+  README.md
+
+source-repository head
+  type: git
+  location: https://github.com/konn/servant-cloudflare-workers
+  subdir: servant-cloudflare-workers-effectful
+
+common defaults
+  autogen-modules: Paths_servant_cloudflare_workers_effectful
+  other-modules: Paths_servant_cloudflare_workers_effectful
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-export-lists
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
+    -Wunused-packages
+
+  default-language: GHC2021
+  default-extensions:
+    BlockArguments
+    DataKinds
+    DeriveAnyClass
+    DerivingStrategies
+    ExplicitNamespaces
+    GADTs
+    LambdaCase
+    OverloadedLabels
+    OverloadedRecordDot
+    RecordWildCards
+    RequiredTypeArguments
+    ScopedTypeVariables
+    TypeFamilies
+
+  build-depends:
+    base >=4.7 && <5
+
+library
+  import: defaults
+  hs-source-dirs: src
+  -- cabal-gild: discover src
+  exposed-modules:
+    Effectful.Servant.Cloudflare.Workers
+    Effectful.Servant.Cloudflare.Workers.Assets
+    Effectful.Servant.Cloudflare.Workers.Cache
+    Effectful.Servant.Cloudflare.Workers.D1
+    Effectful.Servant.Cloudflare.Workers.R2
+
+  build-depends:
+    aeson,
+    cloudflare-worker,
+    effectful,
+    effectful-core,
+    ghc-wasm-jsobjects,
+    mtl,
+    safe-exceptions,
+    servant,
+    servant-cloudflare-workers,
+    text,
+    transformers,

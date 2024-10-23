@@ -1,8 +1,10 @@
 import: cabal-common.project
 semaphore: True
+multi-repl: True
 
 packages:
   servant-cloudflare-workers/
+  servant-cloudflare-workers-effectful/
   servant-client-fetch/
 
   servant-auth/servant-auth-lite

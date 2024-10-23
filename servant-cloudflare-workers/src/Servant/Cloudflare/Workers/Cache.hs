@@ -48,12 +48,11 @@ data CacheOptions = CacheOptions
   }
   deriving (Show, Eq, Ord, Generic)
 
-serveCached :: CacheOptions -> Handler e a -> Handler e a
-serveCached copts act = do
+serveCached :: CacheOptions -> Handler e ()
+serveCached copts = do
   HandlerEnv {..} <- ask
   liftIO (retrieveCache copts request.rawRequest) >>= \case
-    Right resp -> do
-      earlyReturn $ RawResponse resp
+    Right resp -> earlyReturn $ RawResponse resp
     Left keyReq -> do
       addFinaliser \resp -> do
         code <- Resp.getStatus resp
@@ -68,7 +67,6 @@ serveCached copts act = do
             cacheControlHdr
             cacheControl
           waitUntil fetchContext =<< Cache.put keyReq.cacheKeyRequest resp
-      act
 
 serveCachedRaw :: CacheOptions -> WorkerT e Raw m -> WorkerT e Raw m
 serveCachedRaw opts (Tagged app) = Tagged \req env fctx ->
