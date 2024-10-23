@@ -34,6 +34,8 @@ module Effectful.Servant.Cloudflare.Workers (
   interpretWorker,
 
   -- * Re-exports
+  AsWorkerT,
+  AsWorker,
   B.Member,
   B.ListMember,
   B.Lookup',
@@ -114,6 +116,7 @@ import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.API qualified as Servant
 import Servant.Cloudflare.Workers qualified as Servant
+import Servant.Cloudflare.Workers.Generic (AsWorker, AsWorkerT)
 import Servant.Cloudflare.Workers.Internal.Handler (
   Finaliser,
   HandlerEnv (..),
