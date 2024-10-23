@@ -408,7 +408,6 @@ getEnv ::
   , HasUniqueWorkerWith (BindingsClass vs ss bs) es
   , B.ListMember l vs
   , FromJSON a
-  , HasCallStack
   ) =>
   Eff es a
 getEnv l =

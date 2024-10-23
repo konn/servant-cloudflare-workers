@@ -60,7 +60,7 @@ import Data.Time.Clock.POSIX (POSIXTime, getPOSIXTime)
 import Data.Traversable (forM)
 import Data.Word
 import GHC.Generics (Generic)
-import GHC.Stack (HasCallStack)
+import GHC.Stack ()
 import GHC.Wasm.Object.Builtins
 import GHC.Wasm.Web.Generated.AlgorithmIdentifier (AlgorithmIdentifier)
 import GHC.Wasm.Web.Generated.CryptoKey (CryptoKey)
@@ -85,7 +85,7 @@ import qualified Wasm.Prelude.Linear as PL
 A @AuthCheck@ for Cloudflare ZeroTrust. You likely won't need to use this directly unless you are protecting a @Raw@ endpoint.
 -}
 cloudflareZeroTrustAuthCheck ::
-  (FromJWT usr, HasCallStack) =>
+  (FromJWT usr) =>
   CloudflareZeroTrustSettings ->
   AuthCheck usr
 cloudflareZeroTrustAuthCheck sett = do
