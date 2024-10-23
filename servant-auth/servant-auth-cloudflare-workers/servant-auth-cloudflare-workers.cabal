@@ -87,7 +87,6 @@ library
   exposed-modules:
     Servant.Auth.Cloudflare.Workers
     Servant.Auth.Cloudflare.Workers.Internal
-    Servant.Auth.Cloudflare.Workers.Internal.AddSetCookie
     Servant.Auth.Cloudflare.Workers.Internal.BasicAuth
     Servant.Auth.Cloudflare.Workers.Internal.Class
     Servant.Auth.Cloudflare.Workers.Internal.ConfigTypes
