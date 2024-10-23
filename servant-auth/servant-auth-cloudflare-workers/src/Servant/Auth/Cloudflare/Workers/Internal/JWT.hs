@@ -470,7 +470,7 @@ data AlgorithmParams = AlgorithmParams
   , publicExponent :: !(Maybe Word)
   , hash :: !(Maybe T.Text)
   , namedCurve :: !(Maybe T.Text)
-  , length :: !Word
+  , length :: !(Maybe Word)
   }
   deriving (Show, Eq, Ord, Generic)
   deriving anyclass (FromJSON)
