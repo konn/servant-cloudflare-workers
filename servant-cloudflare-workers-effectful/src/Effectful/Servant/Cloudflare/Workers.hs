@@ -202,11 +202,16 @@ genericCompileWorker = compileWorker @e @(ToServantApi routes) . genericWorkerT 
 compileWorkerWithContext ::
   forall e api ctx.
   (HasWorker e api ctx, WorkerContext ctx) =>
-  Context ctx ->
+  (JSObject e -> FetchContext -> IO (Context ctx)) ->
   WorkerT e api (Eff '[ServantWorker e, IOE]) ->
   IO JSHandlers
 compileWorkerWithContext ctx act = runEff $ unsafeEff \es ->
-  toJSHandlers Handlers {fetch = runWorkerWithContext @e @api es ctx act}
+  toJSHandlers
+    Handlers
+      { fetch = \req env fctx -> do
+          workCtx <- ctx env fctx
+          runWorkerWithContext @e @api es workCtx act req env fctx
+      }
 
 genericCompileWorkerWithContext ::
   forall e routes ctx.
@@ -216,7 +221,7 @@ genericCompileWorkerWithContext ::
   , ToServant routes (AsWorkerT e (Eff [ServantWorker e, IOE]))
       ~ WorkerT e (ToServantApi routes) (Eff '[ServantWorker e, IOE])
   ) =>
-  Context ctx ->
+  (JSObject e -> FetchContext -> IO (Context ctx)) ->
   routes (AsWorkerT e (Eff '[ServantWorker e, IOE])) ->
   IO JSHandlers
 genericCompileWorkerWithContext ctx = compileWorkerWithContext @e @(ToServantApi routes) ctx . genericWorkerT @e @routes
