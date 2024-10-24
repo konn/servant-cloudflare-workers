@@ -1,10 +1,15 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeData #-}
+{-# LANGUAGE UnliftedDatatypes #-}
 {-# LANGUAGE NoFieldSelectors #-}
 
 module Servant.Client.FetchAPI (
@@ -16,11 +21,12 @@ module Servant.Client.FetchAPI (
 ) where
 
 import Control.Exception (throwIO)
-import Control.Exception.Safe (MonadCatch, MonadMask, MonadThrow, throwString)
+import Control.Exception.Safe (MonadCatch, MonadMask, MonadThrow, SomeException (..), throwString)
 import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Trans.Reader
+import Data.Bifunctor qualified as Bi
 import Data.Bitraversable qualified as Bi
 import Data.ByteString.Builder qualified as BB
 import Data.ByteString.Lazy.Char8 qualified as LBS
@@ -29,6 +35,7 @@ import Data.Foldable qualified as F
 import Data.Map.Strict qualified as Map
 import Data.Monoid
 import Data.Sequence qualified as Seq
+import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
 import GHC.Generics (Generic)
@@ -40,8 +47,10 @@ import GHC.Wasm.Web.Generated.RequestInfo
 import GHC.Wasm.Web.Generated.RequestInit
 import GHC.Wasm.Web.Generated.Response
 import GHC.Wasm.Web.Generated.Response qualified as FetchResp
+import GHC.Wasm.Web.Generated.Response qualified as JS
 import GHC.Wasm.Web.Generated.URL
 import GHC.Wasm.Web.ReadableStream (fromReadableStream, toReadableStream)
+import Lens.Family.Total
 import Network.HTTP.Media (renderHeader)
 import Network.HTTP.Types.Status (Status (..))
 import Network.HTTP.Types.URI (renderQuery)
@@ -57,8 +66,8 @@ import Streaming.Prelude qualified as S
 import Wasm.Prelude.Linear qualified as PL
 
 newtype FetchT m a = FetchT (ReaderT FetchEnv m a)
-  deriving (Functor, Applicative, Monad, MonadIO)
-  deriving newtype (MonadThrow, MonadCatch, MonadUnliftIO, MonadMask)
+  deriving (Functor)
+  deriving newtype (MonadThrow, MonadCatch, MonadUnliftIO, MonadMask, Applicative, Monad, MonadIO)
   deriving (Semigroup, Monoid) via Ap (FetchT m) a
 
 type FetchM = FetchT IO
@@ -89,45 +98,8 @@ instance (MonadIO m) => RunClient (FetchT m) where
   runRequestAcceptStatus _ req = do
     FetchEnv {..} <- FetchT ask
     liftIO do
-      let path =
-            fromText $
-              TE.decodeUtf8 $
-                LBS.toStrict $
-                  BB.toLazyByteString req.requestPath
-          base = toUSVString $ toJSString $ showBaseUrl baseUrl
-      url <- liftIO $ js_cons_URL path $ nonNull base
-      liftIO $ do
-        unless (null req.requestQueryString) $
-          js_set_search url $
-            fromText $
-              TE.decodeUtf8 $
-                renderQuery True $
-                  F.toList req.requestQueryString
-      meth <- fromHaskellByteString req.requestMethod
-      let headerSeeds =
-            addCType $
-              addAccept $
-                filter ((`notElem` ["Content-Type", "Accept"]) . fst) $
-                  F.toList req.requestHeaders
-          addAccept
-            | null req.requestAccept = id
-            | otherwise = (("Accept", renderHeader $ F.toList req.requestAccept) :)
-          addCType = maybe id ((:) . ("Content-Type",) . renderHeader . snd) req.requestBody
-      hdrs <-
-        toJSRecord @JSByteStringClass @JSByteStringClass
-          . Map.fromList
-          =<< mapM
-            (Bi.bitraverse (pure . TE.decodeUtf8 . CI.original) fromHaskellByteString)
-            headerSeeds
-      mbody <- mapM (fromBody . fst) req.requestBody
-      let reqInit =
-            newDictionary @RequestInitFields do
-              maybe PL.id (setPartialField "body" . nonNull . nonNull) mbody
-                PL.. setPartialField "method" (nonNull meth)
-                PL.. setPartialField "headers" (nonNull $ inject hdrs)
-      fromResp req.requestHttpVersion
-        =<< await
-        =<< fetcher (unsafeCast url) (nonNull reqInit)
+      either throwIO pure
+        =<< fetchWith fetcher baseUrl req
 
 fromBody :: Servant.RequestBody -> IO BodyInit
 fromBody (Servant.RequestBodyLBS lbs) =
@@ -173,6 +145,101 @@ type Fetcher =
   RequestInfo ->
   Nullable RequestInitClass ->
   IO (Promise ResponseClass)
+
+data FetchResult = Ok JS.Response | StatusError JS.Response | UnknownError T.Text
+  deriving (Generic)
+
+fetchWith ::
+  Fetcher ->
+  BaseUrl ->
+  Request ->
+  IO (Either ClientError Servant.Response)
+fetchWith fetcher baseUrl req = do
+  let path =
+        fromText $
+          TE.decodeUtf8 $
+            LBS.toStrict $
+              BB.toLazyByteString req.requestPath
+      base = toUSVString $ toJSString $ showBaseUrl baseUrl
+  url <- liftIO $ js_cons_URL path $ nonNull base
+  liftIO $ do
+    unless (null req.requestQueryString) $
+      js_set_search url $
+        fromText $
+          TE.decodeUtf8 $
+            renderQuery True $
+              F.toList req.requestQueryString
+  meth <- fromHaskellByteString req.requestMethod
+  let headerSeeds =
+        addCType $
+          addAccept $
+            filter ((`notElem` ["Content-Type", "Accept"]) . fst) $
+              F.toList req.requestHeaders
+      addAccept
+        | null req.requestAccept = id
+        | otherwise = (("Accept", renderHeader $ F.toList req.requestAccept) :)
+      addCType = maybe id ((:) . ("Content-Type",) . renderHeader . snd) req.requestBody
+  hdrs <-
+    toJSRecord @JSByteStringClass @JSByteStringClass
+      . Map.fromList
+      =<< mapM
+        (Bi.bitraverse (pure . TE.decodeUtf8 . CI.original) fromHaskellByteString)
+        headerSeeds
+  mbody <- mapM (fromBody . fst) req.requestBody
+  let reqInit =
+        newDictionary @RequestInitFields do
+          maybe PL.id (setPartialField "body" . nonNull . nonNull) mbody
+            PL.. setPartialField "method" (nonNull meth)
+            PL.. setPartialField "headers" (nonNull $ inject hdrs)
+  ftch <- js_wrap_fetcher fetcher
+  res <- await =<< js_fetch_with ftch (unsafeCast url) (nonNull reqInit)
+  resl <- getDictField "result" res
+  resl
+    & ( _case
+          & onEnum #ok do
+            mresp <- fromNullable <$> getDictField "response" res
+            case mresp of
+              Nothing -> pure $ Left $ ConnectionError $ SomeException $ userError "invariant violation: ok returned, but got no response!"
+              Just resp -> Right <$> fromResp req.requestHttpVersion resp
+          & onEnum #statusError do
+            mresp <- fromNullable <$> getDictField "response" res
+            case mresp of
+              Just resp ->
+                Left
+                  . FailureResponse (Bi.bimap (const ()) (\u -> (baseUrl, LBS.toStrict $ BB.toLazyByteString u)) req)
+                  <$> fromResp req.requestHttpVersion resp
+              Nothing -> pure $ Left $ ConnectionError $ SomeException $ userError "invariant violation: statusError returned, but got no response!"
+          & onEnum #error do
+            Left
+              . ConnectionError
+              . SomeException
+              . userError
+              . ("UnknownError during fetch: " <>)
+              . nullable "(No Message)" (T.unpack . toText)
+              <$> getDictField "message" res
+      )
+
+type FetchResultFields =
+  '[ '("result", EnumClass '["ok", "statusError", "error"])
+   , '("response", NullableClass ResponseClass)
+   , '("message", NullableClass USVStringClass)
+   ]
+
+type FetchResultClass = JSDictionaryClass FetchResultFields
+
+type data JSFetcherClass :: Prototype
+
+type JSFetcher = JSObject JSFetcherClass
+
+foreign import javascript safe "external"
+  js_wrap_fetcher :: Fetcher -> IO JSFetcher
+
+foreign import javascript safe "try { const resp = await $1($2, $3); if (resp.ok) { return {result: 'ok', response: resp, message: null } } else { return {result:  'statusError', response: resp, message: resp.statusText} } } catch (error) { return {result: 'error', message: error.toString(), response: null } }"
+  js_fetch_with ::
+    JSFetcher ->
+    RequestInfo ->
+    Nullable RequestInitClass ->
+    IO (Promise FetchResultClass)
 
 foreign import javascript safe "fetch($1, $2)"
   js_toplevel_fetch :: Fetcher

@@ -49,6 +49,7 @@ common defaults
 library
   import: defaults
   build-depends:
+    aeson,
     bytestring,
     case-insensitive,
     containers,
@@ -63,6 +64,7 @@ library
     streaming,
     streaming-bytestring,
     text,
+    total,
     transformers,
     unliftio-core,
     wasm-linear-base,
