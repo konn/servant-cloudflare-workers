@@ -191,8 +191,7 @@ fetchWith fetcher baseUrl req = do
           maybe PL.id (setPartialField "body" . nonNull . nonNull) mbody
             PL.. setPartialField "method" (nonNull meth)
             PL.. setPartialField "headers" (nonNull $ inject hdrs)
-  ftch <- js_wrap_fetcher fetcher
-  res <- await =<< js_fetch_with ftch (unsafeCast url) (nonNull reqInit)
+  res <- await =<< js_handle_fetch =<< fetcher (unsafeCast url) (nonNull reqInit)
   resl <- getDictField "result" res
   resl
     & ( _case
@@ -227,18 +226,9 @@ type FetchResultFields =
 
 type FetchResultClass = JSDictionaryClass FetchResultFields
 
-type data JSFetcherClass :: Prototype
-
-type JSFetcher = JSObject JSFetcherClass
-
-foreign import javascript unsafe "wrapper"
-  js_wrap_fetcher :: Fetcher -> IO JSFetcher
-
-foreign import javascript safe "try { const resp = await $1($2, $3); if (resp.ok) { return {result: 'ok', response: resp, message: null } } else { return {result:  'statusError', response: resp, message: resp.statusText} } } catch (error) { return {result: 'error', message: error.toString(), response: null } }"
-  js_fetch_with ::
-    JSFetcher ->
-    RequestInfo ->
-    Nullable RequestInitClass ->
+foreign import javascript safe "try { const resp = await $1; if (resp.ok) { return {result: 'ok', response: resp, message: null } } else { return {result:  'statusError', response: resp, message: resp.statusText} } } catch (error) { return {result: 'error', message: error.toString(), response: null } }"
+  js_handle_fetch ::
+    Promise ResponseClass ->
     IO (Promise FetchResultClass)
 
 foreign import javascript safe "fetch($1, $2)"
