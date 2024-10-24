@@ -231,7 +231,7 @@ type data JSFetcherClass :: Prototype
 
 type JSFetcher = JSObject JSFetcherClass
 
-foreign import javascript safe "external"
+foreign import javascript unsafe "wrapper"
   js_wrap_fetcher :: Fetcher -> IO JSFetcher
 
 foreign import javascript safe "try { const resp = await $1($2, $3); if (resp.ok) { return {result: 'ok', response: resp, message: null } } else { return {result:  'statusError', response: resp, message: resp.statusText} } } catch (error) { return {result: 'error', message: error.toString(), response: null } }"
