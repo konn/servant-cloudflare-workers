@@ -4,7 +4,6 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE LinearTypes #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -40,7 +39,6 @@ import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
-import GHC.Exts (noinline)
 import GHC.Generics (Generic)
 import GHC.Wasm.Object.Builtins
 import GHC.Wasm.Prim
@@ -66,7 +64,6 @@ import Servant.Types.SourceT qualified as Servant
 import Streaming.ByteString qualified as Q
 import Streaming.ByteString.Internal qualified as QI
 import Streaming.Prelude qualified as S
-import Wasm.Prelude.Linear qualified as PL
 
 newtype FetchT m a = FetchT (ReaderT FetchEnv m a)
   deriving (Functor)
@@ -223,13 +220,10 @@ fetchWith fetcher baseUrl req = do
       )
 
 newReqInit :: JSByteString -> JSRecord JSByteStringClass JSByteStringClass -> Maybe BodyInit -> IO RequestInit
-{-# NOINLINE newReqInit #-}
 newReqInit meth hdrs mbody = do
-  pure $
-    noinline newDictionary do
-      maybe PL.id (setPartialField "body" . nonNull . nonNull) mbody
-        PL.. setPartialField "method" (nonNull meth)
-        PL.. setPartialField "headers" (nonNull $ inject hdrs)
+  case mbody of
+    Nothing -> js_new_req_init_nobody meth hdrs
+    Just body -> js_new_req_nobody meth hdrs body
 
 type FetchResultFields =
   '[ '("result", EnumClass '["ok", "statusError", "error"])
