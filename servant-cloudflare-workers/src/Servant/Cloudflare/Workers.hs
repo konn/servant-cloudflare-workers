@@ -58,16 +58,6 @@ module Servant.Cloudflare.Workers (
   NamedContext (..),
   descendIntoNamedContext,
 
-  -- * Basic Authentication
-  BasicAuthCheck (BasicAuthCheck, unBasicAuthCheck),
-  BasicAuthResult (..),
-
-  -- * General Authentication
-
-  -- , AuthHandler(unAuthHandler)
-  -- , AuthServerData
-  -- , mkAuthHandler
-
   -- * Default error type
   ServerError (..),
 

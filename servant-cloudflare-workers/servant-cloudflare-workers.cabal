@@ -96,7 +96,6 @@ library
     Servant.Cloudflare.Workers.Cache
     Servant.Cloudflare.Workers.Generic
     Servant.Cloudflare.Workers.Internal
-    Servant.Cloudflare.Workers.Internal.BasicAuth
     Servant.Cloudflare.Workers.Internal.Context
     Servant.Cloudflare.Workers.Internal.Delayed
     Servant.Cloudflare.Workers.Internal.DelayedIO
@@ -133,7 +132,6 @@ library
   build-depends:
     aeson,
     async,
-    base64-bytestring >=1.0.0.1 && <1.3,
     case-insensitive,
     cloudflare-worker,
     containers,
@@ -152,7 +150,6 @@ library
     transformers-base >=0.4.5.2 && <0.5,
     wasm-linear-base,
     web-sys-hs,
-    word8 >=0.1.3 && <0.2,
 
   if !os(wasi)
     build-depends: ghc-wasm-compat

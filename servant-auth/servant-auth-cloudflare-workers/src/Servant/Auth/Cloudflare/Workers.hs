@@ -115,17 +115,10 @@ module Servant.Auth.Cloudflare.Workers (
   BasicAuth,
 
   -- ** Classes
-  FromBasicAuthData (..),
-
-  -- ** Settings
-  BasicAuthCfg,
 
   -- ** Related types
   BasicAuthData (..),
   IsPasswordCorrect (..),
-
-  -- ** Authentication request
-  wwwAuthenticatedErr,
   ----------------------------------------------------------------------------
 
   -- * Utilies
@@ -146,7 +139,6 @@ import GHC.Wasm.Web.Generated.SubtleCrypto (js_fun_generateKey_AlgorithmIdentifi
 import Network.Cloudflare.Worker.Crypto (subtleCrypto)
 import Servant.Auth
 import Servant.Auth.Cloudflare.Workers.Internal ()
-import Servant.Auth.Cloudflare.Workers.Internal.BasicAuth
 import Servant.Auth.Cloudflare.Workers.Internal.Class
 import Servant.Auth.Cloudflare.Workers.Internal.ConfigTypes
 import Servant.Auth.Cloudflare.Workers.Internal.JWT

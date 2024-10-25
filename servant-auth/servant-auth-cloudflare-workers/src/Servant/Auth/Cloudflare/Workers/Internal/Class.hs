@@ -4,7 +4,6 @@ module Servant.Auth.Cloudflare.Workers.Internal.Class where
 
 import Data.Kind (Type)
 import Servant.Auth
-import Servant.Auth.Cloudflare.Workers.Internal.BasicAuth
 import Servant.Auth.Cloudflare.Workers.Internal.ConfigTypes
 import Servant.Auth.Cloudflare.Workers.Internal.JWT (cloudflareZeroTrustAuthCheck, jwtAuthCheck)
 import Servant.Auth.Cloudflare.Workers.Internal.Types
@@ -22,10 +21,6 @@ class IsAuth a v where
 instance (FromJWT usr) => IsAuth JWT usr where
   type AuthArgs JWT = '[JWTSettings]
   runAuth _ _ = jwtAuthCheck
-
-instance (FromBasicAuthData usr) => IsAuth BasicAuth usr where
-  type AuthArgs BasicAuth = '[BasicAuthCfg]
-  runAuth _ _ = basicAuthCheck
 
 instance (FromJWT usr) => IsAuth CloudflareZeroTrust usr where
   type AuthArgs CloudflareZeroTrust = '[CloudflareZeroTrustSettings]

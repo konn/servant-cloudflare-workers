@@ -4,7 +4,6 @@
 
 module Servant.Cloudflare.Workers.Internal (
   module Servant.Cloudflare.Workers.Internal,
-  module Servant.Cloudflare.Workers.Internal.BasicAuth,
   module Servant.Cloudflare.Workers.Internal.Context,
   module Servant.Cloudflare.Workers.Internal.Delayed,
   module Servant.Cloudflare.Workers.Internal.DelayedIO,
@@ -76,7 +75,6 @@ import Network.HTTP.Types hiding (
 import qualified Network.HTTP.Types as H
 import Servant.API (
   Accept (..),
-  BasicAuth,
   Capture',
   CaptureAll,
   DeepQuery,
@@ -134,7 +132,6 @@ import Servant.API.Status (
  )
 import Servant.API.TypeErrors
 import Servant.API.TypeLevel (AtMostOneFragment, FragmentUnique)
-import Servant.Cloudflare.Workers.Internal.BasicAuth
 import Servant.Cloudflare.Workers.Internal.Context
 import Servant.Cloudflare.Workers.Internal.Delayed
 import Servant.Cloudflare.Workers.Internal.DelayedIO
@@ -1165,26 +1162,6 @@ instance (HasWorker e api context) => HasWorker e (EmptyAPI :> api) context wher
 
   route pe _ = route pe (Proxy :: Proxy api)
   hoistWorkerWithContext pe _ = hoistWorkerWithContext pe (Proxy :: Proxy api)
-
--- | Basic Authentication
-instance
-  ( KnownSymbol realm
-  , HasWorker e api context
-  , HasContextEntry context (BasicAuthCheck usr)
-  ) =>
-  HasWorker e (BasicAuth realm usr :> api) context
-  where
-  type WorkerT e (BasicAuth realm usr :> api) m = usr -> WorkerT e api m
-
-  route pe Proxy context subserver =
-    route pe (Proxy :: Proxy api) context (subserver `addAuthCheck` authCheck)
-    where
-      realm = BC8.pack $ symbolVal (Proxy :: Proxy realm)
-      basicAuthContext = getContextEntry context
-      authCheck = withRequest $ \req _ _ -> runBasicAuth req.rawRequest realm basicAuthContext
-
-  hoistWorkerWithContext pe _ pc nt s =
-    hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
 
 -- * helpers
 
