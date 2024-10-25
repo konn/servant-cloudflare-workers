@@ -9,7 +9,7 @@ import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Network.HTTP.Types
 import Servant.API.Generic
-import Servant.Cloudflare.Workers hiding (respond)
+import Servant.Cloudflare.Workers
 import Servant.Cloudflare.Workers.Generic
 import Servant.Cloudflare.Workers.Internal.Response (responseBS, toWorkerResponse)
 import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest)

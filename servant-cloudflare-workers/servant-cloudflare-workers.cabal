@@ -94,7 +94,6 @@ library
     Servant.Cloudflare.Workers
     Servant.Cloudflare.Workers.Assets
     Servant.Cloudflare.Workers.Cache
-    Servant.Cloudflare.Workers.Experimental.Auth
     Servant.Cloudflare.Workers.Generic
     Servant.Cloudflare.Workers.Internal
     Servant.Cloudflare.Workers.Internal.BasicAuth
