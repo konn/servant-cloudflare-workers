@@ -36,7 +36,6 @@ import Data.Foldable qualified as F
 import Data.Map.Strict qualified as Map
 import Data.Monoid
 import Data.Sequence qualified as Seq
-import Data.String (fromString)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
@@ -157,7 +156,6 @@ fetchWith ::
   Request ->
   IO (Either ClientError Servant.Response)
 fetchWith fetcher baseUrl req = do
-  consoleLog $ fromString $ "fetchWith: " <> show req
   let path =
         fromText $
           TE.decodeUtf8 $
@@ -189,9 +187,11 @@ fetchWith fetcher baseUrl req = do
         (Bi.bitraverse (pure . TE.decodeUtf8 . CI.original) fromHaskellByteString)
         headerSeeds
   mbody <- mapM (fromBody . fst) req.requestBody
+  -- NOTE: We once used newDicationary, but it seems its purity makes GHC optimiser
+  -- work wrong and makes consecutive calls to reuse body from the previous request.
+  -- This must not be the case, so we provide a direct reqinit construction to avoid
+  -- the bug.
   reqInit <- newReqInit meth hdrs mbody
-  reqInitStr <- js_stringify reqInit
-  consoleLog reqInitStr
   res <- await =<< js_handle_fetch =<< fetcher (unsafeCast url) (nonNull reqInit)
   resl <- getDictField "result" res
   resl
@@ -243,12 +243,6 @@ foreign import javascript safe "fetch($1, $2)"
 
 foreign import javascript safe "$1.fetch($2, $3)"
   js_fetch_of :: JSObject a -> Fetcher
-
-foreign import javascript unsafe "console.log($1)"
-  consoleLog :: USVString -> IO ()
-
-foreign import javascript unsafe "JSON.stringify($1)"
-  js_stringify :: JSObject a -> IO USVString
 
 foreign import javascript unsafe "new Uint8Array($1)"
   cloneByteArray :: JSByteArray c -> IO (JSByteArray c)
