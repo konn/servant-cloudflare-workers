@@ -31,5 +31,5 @@ serveCached copts = do
       addFinaliser $ saveCache copts fctx keyReq
 
 serveCachedRawM :: (HasUniqueWorker es) => CacheOptions -> WorkerT e RawM (Eff es) -> WorkerT e RawM (Eff es)
-serveCachedRawM opts act req env ctx =
-  unsafeEff $ \es -> serveCachedIO opts req.rawRequest ctx (unEff (act req env ctx) es)
+serveCachedRawM opts act req env ctx respond =
+  unsafeEff $ \es -> serveCachedIO opts req.rawRequest ctx (unEff (act req env ctx respond) es)

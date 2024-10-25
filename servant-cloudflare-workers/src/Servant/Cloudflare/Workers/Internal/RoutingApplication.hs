@@ -22,7 +22,8 @@ type RoutingApplication e =
   RoutingRequest ->
   JSObject e ->
   FetchContext ->
-  IO (RouteResult RoutingResponse)
+  (RouteResult RoutingResponse -> IO WorkerResponse) ->
+  IO WorkerResponse
 
 toFetchHandler :: RoutingApplication e -> FetchHandler e
 toFetchHandler ra rawRequest env ctx =
@@ -33,7 +34,7 @@ toFetchHandler ra rawRequest env ctx =
               TE.encodeUtf8 $
                 Req.getUrl rawRequest
       req0 = RoutingRequest {..}
-   in routingRespond =<< ra req0 env ctx
+   in ra req0 env ctx routingRespond
   where
     routingRespond :: RouteResult RoutingResponse -> IO WorkerResponse
     routingRespond (Fail err) = toWorkerResponse (responseServerError err)

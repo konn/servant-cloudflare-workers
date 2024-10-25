@@ -1,6 +1,4 @@
-{-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -41,7 +39,7 @@ data RouteResult a
     FailFatal !ServerError
   | Route !a
   | FastReturn WorkerResponse
-  deriving (Functor, Foldable, Traversable)
+  deriving (Functor)
 
 instance Applicative RouteResult where
   pure = Route

@@ -45,6 +45,9 @@ module Servant.Cloudflare.Workers (
   -- * Enter / hoisting server
   hoistWorker,
 
+  -- ** Functions based on <https://hackage.haskell.org/package/mmorph mmorph>
+  tweakResponse,
+
   -- * Context
   Context (..),
   HasContextEntry (getContextEntry),

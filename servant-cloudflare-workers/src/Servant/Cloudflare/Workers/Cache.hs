@@ -62,8 +62,8 @@ serveCachedRaw opts (Tagged app) = Tagged \req env fctx ->
   serveCachedIO opts req.rawRequest fctx (app req env fctx)
 
 serveCachedRawM :: (MonadIO m) => CacheOptions -> WorkerT e RawM m -> WorkerT e RawM m
-serveCachedRawM opts act req env ctx = do
-  serveCachedIO opts req.rawRequest ctx (act req env ctx)
+serveCachedRawM opts act req env ctx respond =
+  serveCachedIO opts req.rawRequest ctx (act req env ctx respond)
 
 serveCachedIO ::
   (MonadIO m) =>
