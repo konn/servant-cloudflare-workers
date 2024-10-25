@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -8,7 +9,14 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Servant.Cloudflare.Workers.Internal.Context where
+module Servant.Cloudflare.Workers.Internal.Context (
+  Context (..),
+  HasContextEntry (..),
+  NamedContext (..),
+  type (.++),
+  (.++),
+  descendIntoNamedContext,
+) where
 
 import Data.Kind (
   Type,

@@ -7,7 +7,20 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Servant.Cloudflare.Workers.Internal.Delayed where
+module Servant.Cloudflare.Workers.Internal.Delayed (
+  Delayed,
+  runDelayed,
+  emptyDelayed,
+  addCapture,
+  addParameterCheck,
+  runAction,
+  addMethodCheck,
+  addAcceptCheck,
+  addHeaderCheck,
+  addBodyCheck,
+  addAuthCheck,
+  passToServer,
+) where
 
 import Control.Monad.IO.Class (
   MonadIO (..),

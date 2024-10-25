@@ -2,7 +2,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Servant.Cloudflare.Workers.Internal.DelayedIO where
+module Servant.Cloudflare.Workers.Internal.DelayedIO (
+  DelayedIO (..),
+  runDelayedIO,
+  withRequest,
+  delayedFail,
+  delayedFailFatal,
+  liftRouteResult,
+) where
 
 import Control.Monad.Base (
   MonadBase (..),

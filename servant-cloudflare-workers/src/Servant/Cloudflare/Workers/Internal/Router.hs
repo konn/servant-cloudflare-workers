@@ -4,7 +4,16 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Servant.Cloudflare.Workers.Internal.Router where
+module Servant.Cloudflare.Workers.Internal.Router (
+  CaptureHint (..),
+  Router' (..),
+  Router,
+  runRouter,
+  pathRouter,
+  leafRouter,
+  choice,
+  routerLayout,
+) where
 
 import Data.Function (
   on,
@@ -24,7 +33,6 @@ import Data.Typeable (
   TypeRep,
  )
 import Servant.Cloudflare.Workers.Internal.ErrorFormatter
-import Servant.Cloudflare.Workers.Internal.Response
 import Servant.Cloudflare.Workers.Internal.RouteResult
 import Servant.Cloudflare.Workers.Internal.RoutingApplication
 import Servant.Cloudflare.Workers.Internal.ServerError
@@ -148,11 +156,6 @@ routerStructure (Choice r1 r2) =
     (routerStructure r1)
     (routerStructure r2)
 
--- | Compare the structure of two routers.
-sameStructure :: Router' env a -> Router' env b -> Bool
-sameStructure router1 router2 =
-  routerStructure router1 == routerStructure router2
-
 {- | Provide a textual representation of the
 structure of a router.
 -}
@@ -185,10 +188,6 @@ routerLayout router =
     mkSubTree :: Bool -> Text -> [Text] -> [Text]
     mkSubTree True path children = ("├─ " <> path <> "/") : map ("│  " <>) children
     mkSubTree False path children = ("└─ " <> path <> "/") : map ("   " <>) children
-
--- | Apply a transformation to the response of a `Router`.
-tweakResponse :: (RouteResult RoutingResponse -> RouteResult RoutingResponse) -> Router b env -> Router b env
-tweakResponse f = fmap (\a -> \req b c cont -> a req b c (cont . f))
 
 -- | Interpret a router as an application.
 runRouter :: NotFoundErrorFormatter -> Router b () -> RoutingApplication b

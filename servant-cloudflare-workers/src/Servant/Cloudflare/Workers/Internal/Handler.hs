@@ -6,7 +6,23 @@
 {-# LANGUAGE RequiredTypeArguments #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Servant.Cloudflare.Workers.Internal.Handler where
+module Servant.Cloudflare.Workers.Internal.Handler (
+  Handler (..),
+  Finaliser,
+  addFinaliser,
+  runHandler,
+  earlyReturn,
+  serverError,
+  ServerReturn (..),
+  HandlerEnv (..),
+  responseServerReturn,
+  getEnv,
+  getBinding,
+  getSecret,
+  getRawRequest,
+  getWorkerEnv,
+  getRemainingPathPieces,
+) where
 
 import Control.Monad.Base (
   MonadBase (..),
