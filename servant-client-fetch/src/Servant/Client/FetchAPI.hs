@@ -194,6 +194,8 @@ fetchWith fetcher baseUrl req = do
           maybe PL.id (setPartialField "body" . nonNull . nonNull) (guardMethod (CI.mk req.requestMethod) mbody)
             PL.. setPartialField "method" (nonNull meth)
             PL.. setPartialField "headers" (nonNull $ inject hdrs)
+  reqInitStr <- js_stringify reqInit
+  consoleLog reqInitStr
   res <- await =<< js_handle_fetch =<< fetcher (unsafeCast url) (nonNull reqInit)
   resl <- getDictField "result" res
   resl
@@ -247,3 +249,6 @@ foreign import javascript safe "$1.fetch($2, $3)"
 
 foreign import javascript unsafe "console.log($1)"
   consoleLog :: USVString -> IO ()
+
+foreign import javascript unsafe "JSON.stringify($1)"
+  js_stringify :: JSObject a -> IO USVString
