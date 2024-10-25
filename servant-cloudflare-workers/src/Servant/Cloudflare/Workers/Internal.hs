@@ -19,14 +19,8 @@ import Control.Monad (
   join,
  )
 import Control.Monad.Trans (
-  lift,
   liftIO,
  )
-import Control.Monad.Trans.Resource (
-  ReleaseKey,
-  runResourceT,
- )
-import Data.Acquire
 import qualified Data.Bifunctor as Bi
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
@@ -94,7 +88,6 @@ import Servant.API (
   Summary,
   Verb,
   WithNamedContext,
-  WithResource,
   (:<|>) (..),
   (:>),
  )
@@ -301,42 +294,6 @@ instance
       rep = typeRep (Proxy :: Proxy CaptureAll)
       formatError = urlParseErrorFormatter $ getContextEntry (mkContextWithErrorFormatter context)
       hint = CaptureHint (T.pack $ symbolVal $ Proxy @capture) (typeRep (Proxy :: Proxy [a]))
-
-{- | If you use 'WithResource' in one of the endpoints for your API Servant
-will provide the handler for this endpoint an argument of the specified type.
-The lifespan of this resource will be automatically managed by Servant. This
-resource will be created before the handler starts and it will be destoyed
-after it ends. A new resource is created for each request to the endpoint.
--}
-
--- The creation and destruction are done using a 'Data.Acquire.Acquire'
--- provided via server 'Context'.
---
--- Example
---
--- > type MyApi = WithResource Handle :> "writeToFile" :> Post '[JSON] NoContent
--- >
--- > server :: Worker MyApi
--- > server = writeToFile
--- >   where writeToFile :: (ReleaseKey, Handle) -> Handler NoContent
--- >         writeToFile (_, h) = hPutStrLn h "message"
---
--- In addition to the resource, the handler will also receive a 'ReleaseKey'
--- which can be used to deallocate the resource before the end of the request
--- if desired.
-
-instance
-  (HasWorker e api ctx, HasContextEntry ctx (Acquire a)) =>
-  HasWorker e (WithResource a :> api) ctx
-  where
-  type WorkerT e (WithResource a :> api) m = (ReleaseKey, a) -> WorkerT e api m
-
-  hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy @api) pc nt . s
-
-  route pe Proxy context d = route pe (Proxy @api) context (d `addParameterCheck` allocateResource)
-    where
-      allocateResource :: DelayedIO e (ReleaseKey, a)
-      allocateResource = DelayedIO $ lift $ allocateAcquire (getContextEntry context)
 
 fromJSBS :: JSByteString -> B.ByteString
 {-# NOINLINE fromJSBS #-}
@@ -847,7 +804,7 @@ instance HasWorker e Raw context where
 
   hoistWorkerWithContext _ _ _ _ = retag
 
-  route _ Proxy _ rawApplication = RawRouter $ \env request wenv fctx respond -> runResourceT $ do
+  route _ Proxy _ rawApplication = RawRouter $ \env request wenv fctx respond -> do
     -- note: a Raw application doesn't register any cleanup
     -- but for the sake of consistency, we nonetheless run
     -- the cleanup once its done
@@ -878,10 +835,10 @@ instance HasWorker e RawM context where
       (RouteResult RoutingResponse -> IO WorkerResponse) ->
       m WorkerResponse
 
-  route _ _ _ handleDelayed = RawRouter $ \env request wenv fctx respond -> runResourceT $ do
+  route _ _ _ handleDelayed = RawRouter $ \env request wenv fctx respond -> do
     routeResult <- runDelayed handleDelayed env request wenv fctx
     let respond' = liftIO . respond
-    liftIO $ case routeResult of
+    case routeResult of
       Route handler ->
         runHandler request wenv fctx (handler request wenv fctx respond)
           >>= \case

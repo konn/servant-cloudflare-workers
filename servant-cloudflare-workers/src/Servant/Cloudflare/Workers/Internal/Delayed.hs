@@ -28,10 +28,6 @@ import Control.Monad.IO.Class (
 import Control.Monad.Reader (
   ask,
  )
-import Control.Monad.Trans.Resource (
-  ResourceT,
-  runResourceT,
- )
 import Data.Monoid (Ap (..))
 import GHC.Wasm.Object.Builtins
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
@@ -268,7 +264,7 @@ runDelayed ::
   RoutingRequest ->
   JSObject e ->
   FetchContext ->
-  ResourceT IO (RouteResult a)
+  IO (RouteResult a)
 runDelayed Delayed {..} env = runDelayedIO $ do
   HandlerEnv {..} <- ask
   c <- capturesD env
@@ -296,8 +292,7 @@ runAction ::
   (a -> RouteResult RoutingResponse) ->
   IO r
 runAction action env req bind fenv respond k =
-  runResourceT $
-    runDelayed action env req bind fenv >>= go
+  runDelayed action env req bind fenv >>= go
   where
     go (Fail e) = liftIO $ respond $ Fail e
     go (FailFatal e) = liftIO $ respond $ FailFatal e
