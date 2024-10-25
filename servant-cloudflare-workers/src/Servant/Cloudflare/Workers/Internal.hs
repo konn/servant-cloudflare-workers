@@ -17,7 +17,6 @@ module Servant.Cloudflare.Workers.Internal (
 
 import Control.Monad (
   join,
-  when,
  )
 import Control.Monad.Trans (
   lift,
@@ -42,9 +41,7 @@ import Data.Kind (
  )
 import Data.Maybe (
   fromMaybe,
-  isNothing,
   mapMaybe,
-  maybeToList,
  )
 import Data.Monoid (Ap (..))
 import Data.String (
@@ -67,14 +64,12 @@ import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import qualified Network.Cloudflare.Worker.Request as Req
 import Network.Cloudflare.Worker.Response (WorkerResponse, WorkerResponseBody (..))
-import qualified Network.HTTP.Media as NHM
 import Network.HTTP.Types hiding (
   Header,
   ResponseHeaders,
  )
 import qualified Network.HTTP.Types as H
 import Servant.API (
-  Accept (..),
   Capture',
   CaptureAll,
   DeepQuery,
@@ -96,8 +91,6 @@ import Servant.API (
   ReqBody',
   SBool (..),
   SBoolI (..),
-  Stream,
-  StreamBody',
   Summary,
   Verb,
   WithNamedContext,
@@ -142,7 +135,6 @@ import Servant.Cloudflare.Workers.Internal.RouteResult
 import Servant.Cloudflare.Workers.Internal.Router
 import Servant.Cloudflare.Workers.Internal.RoutingApplication
 import Servant.Cloudflare.Workers.Internal.ServerError
-import Servant.Cloudflare.Workers.ReadableStream
 import qualified Streaming.ByteString as Q
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Read (readMaybe)
@@ -469,70 +461,6 @@ instance
   route Proxy _ _ = noContentRouter method status204
     where
       method = reflectMethod (Proxy :: Proxy method)
-
-instance
-  {-# OVERLAPPABLE #-}
-  ( Accept ctype
-  , ReflectMethod method
-  , KnownNat status
-  , ToReadableStream a
-  ) =>
-  HasWorker e (Stream method status framing ctype a) context
-  where
-  type WorkerT e (Stream method status framing ctype a) m = m a
-  hoistWorkerWithContext _ _ _ nt s = nt s
-
-  route Proxy _ _ = streamRouter ([],) method status (Proxy :: Proxy framing) (Proxy :: Proxy ctype)
-    where
-      method = reflectMethod (Proxy :: Proxy method)
-      status = statusFromNat (Proxy :: Proxy status)
-
-instance
-  {-# OVERLAPPING #-}
-  ( Accept ctype
-  , ReflectMethod method
-  , KnownNat status
-  , ToReadableStream a
-  , GetHeaders (Headers h a)
-  ) =>
-  HasWorker e (Stream method status framing ctype (Headers h a)) context
-  where
-  type WorkerT e (Stream method status framing ctype (Headers h a)) m = m (Headers h a)
-  hoistWorkerWithContext _ _ _ nt s = nt s
-
-  route Proxy _ _ = streamRouter (\x -> (getHeaders x, getResponse x)) method status (Proxy :: Proxy framing) (Proxy :: Proxy ctype)
-    where
-      method = reflectMethod (Proxy :: Proxy method)
-      status = statusFromNat (Proxy :: Proxy status)
-
-streamRouter ::
-  forall e ctype a c env framing.
-  (Accept ctype, ToReadableStream a) =>
-  (c -> ([(HeaderName, B.ByteString)], a)) ->
-  Method ->
-  Status ->
-  Proxy framing ->
-  Proxy ctype ->
-  Delayed e env (Handler e c) ->
-  Router e env
-streamRouter splitHeaders method status _ ctypeproxy action = leafRouter $ \env request b fctx respond ->
-  let AcceptHeader accH = getAcceptHeader request.rawRequest
-      cmediatype = NHM.matchAccept [contentType ctypeproxy] accH
-      accCheck = when (isNothing cmediatype) $ delayedFail err406
-      contentHeader = (hContentType, NHM.renderHeader . maybeToList $ cmediatype)
-   in runAction
-        ( action
-            `addMethodCheck` methodCheck method request
-            `addAcceptCheck` accCheck
-        )
-        env
-        request
-        b
-        fctx
-        respond
-        $ \output ->
-          let (headers, fa) = splitHeaders output
-           in Route $ responseStream status (contentHeader : headers) (toReadableStream' fa)
 
 responseStream :: Status -> [(HeaderName, BC8.ByteString)] -> RS.ReadableStream -> RoutingResponse
 responseStream stt hdrs str =
@@ -1038,28 +966,6 @@ instance
 lazyRequestBody :: WorkerRequest -> IO BSL.ByteString
 lazyRequestBody =
   nullable (pure mempty) (Q.toLazy_ . RS.fromReadableStream) . Req.getBody
-
-instance
-  ( FromReadableStream a
-  , HasWorker e api context
-  ) =>
-  HasWorker e (StreamBody' mods framing ctype a :> api) context
-  where
-  type WorkerT e (StreamBody' mods framing ctype a :> api) m = a -> WorkerT e api m
-
-  hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
-
-  route pe Proxy context subserver =
-    route pe (Proxy :: Proxy api) context $
-      addBodyCheck subserver ctCheck bodyCheck
-    where
-      ctCheck :: DelayedIO e (ReadableStream -> IO a)
-      -- TODO: do content-type check
-      ctCheck = return fromReadableStreamIO
-
-      bodyCheck :: (ReadableStream -> IO a) -> DelayedIO e a
-      bodyCheck fromRS = withRequest $ \req _ _ -> do
-        liftIO $ fromRS =<< reqBodyToStream req.rawRequest
 
 reqBodyToStream :: WorkerRequest -> IO ReadableStream
 reqBodyToStream =
