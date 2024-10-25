@@ -51,7 +51,7 @@ import GHC.Wasm.Web.Generated.Response
 import GHC.Wasm.Web.Generated.Response qualified as FetchResp
 import GHC.Wasm.Web.Generated.Response qualified as JS
 import GHC.Wasm.Web.Generated.URL
-import GHC.Wasm.Web.ReadableStream (fromReadableStream, toReadableStream)
+import GHC.Wasm.Web.ReadableStream (fromReadableStream)
 import Lens.Family.Total
 import Network.HTTP.Media (renderHeader)
 import Network.HTTP.Types.Status (Status (..))
@@ -103,15 +103,16 @@ instance (MonadIO m) => RunClient (FetchT m) where
       either throwIO pure
         =<< fetchWith fetcher baseUrl req
 
+toUint8Array :: BS.ByteString -> IO (JSByteArray Word8)
+toUint8Array bs = useByteStringAsJSByteArray @Word8 bs cloneByteArray
+
 fromBody :: Servant.RequestBody -> IO BodyInit
 fromBody (Servant.RequestBodyLBS lbs) =
-  useByteStringAsJSByteArray @Word8 (LBS.toStrict lbs) \bs ->
-    pure $ inject bs
+  inject <$> toUint8Array (LBS.toStrict lbs)
 fromBody (Servant.RequestBodyBS bs) =
-  useByteStringAsJSByteArray @Word8 bs \bs' ->
-    pure $ inject bs'
+  inject <$> toUint8Array bs
 fromBody (Servant.RequestBodySource src) =
-  fmap inject $ toReadableStream (fromSourceIOLBS src)
+  fmap inject $ toUint8Array =<< Q.toStrict_ (fromSourceIOLBS src)
 
 fromSourceIOLBS :: SourceIO LBS.ByteString -> Q.ByteStream IO ()
 fromSourceIOLBS (Servant.SourceT withSteps) = QI.Go $ withSteps $ pure . go
@@ -252,3 +253,6 @@ foreign import javascript unsafe "console.log($1)"
 
 foreign import javascript unsafe "JSON.stringify($1)"
   js_stringify :: JSObject a -> IO USVString
+
+foreign import javascript unsafe "new Uint8Array($1)"
+  cloneByteArray :: JSByteArray c -> IO (JSByteArray c)
