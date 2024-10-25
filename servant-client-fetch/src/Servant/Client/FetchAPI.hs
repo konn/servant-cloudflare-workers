@@ -22,13 +22,14 @@ module Servant.Client.FetchAPI (
 
 import Control.Exception (throwIO)
 import Control.Exception.Safe (MonadCatch, MonadMask, MonadThrow, SomeException (..), throwString)
-import Control.Monad (unless)
+import Control.Monad (guard, unless)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Trans.Reader
 import Data.Bifunctor qualified as Bi
 import Data.Bitraversable qualified as Bi
 import Data.ByteString.Builder qualified as BB
+import Data.ByteString.Char8 qualified as BS
 import Data.ByteString.Lazy.Char8 qualified as LBS
 import Data.CaseInsensitive qualified as CI
 import Data.Foldable qualified as F
@@ -188,7 +189,7 @@ fetchWith fetcher baseUrl req = do
   mbody <- mapM (fromBody . fst) req.requestBody
   let reqInit =
         newDictionary @RequestInitFields do
-          maybe PL.id (setPartialField "body" . nonNull . nonNull) mbody
+          maybe PL.id (setPartialField "body" . nonNull . nonNull) (guardMethod (CI.mk req.requestMethod) mbody)
             PL.. setPartialField "method" (nonNull meth)
             PL.. setPartialField "headers" (nonNull $ inject hdrs)
   res <- await =<< js_handle_fetch =<< fetcher (unsafeCast url) (nonNull reqInit)
@@ -217,6 +218,11 @@ fetchWith fetcher baseUrl req = do
               . nullable "(No Message)" (T.unpack . toText)
               <$> getDictField "message" res
       )
+
+guardMethod :: CI.CI BS.ByteString -> Maybe BodyInit -> Maybe BodyInit
+guardMethod meth body = do
+  guard $ meth /= "GET" && meth /= "HEAD"
+  body
 
 type FetchResultFields =
   '[ '("result", EnumClass '["ok", "statusError", "error"])
