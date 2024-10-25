@@ -22,7 +22,7 @@ module Servant.Client.FetchAPI (
 
 import Control.Exception (throwIO)
 import Control.Exception.Safe (MonadCatch, MonadMask, MonadThrow, SomeException (..), throwString)
-import Control.Monad (guard, unless)
+import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Trans.Reader
@@ -65,7 +65,6 @@ import Servant.Types.SourceT qualified as Servant
 import Streaming.ByteString qualified as Q
 import Streaming.ByteString.Internal qualified as QI
 import Streaming.Prelude qualified as S
-import Wasm.Prelude.Linear qualified as PL
 
 newtype FetchT m a = FetchT (ReaderT FetchEnv m a)
   deriving (Functor)
@@ -190,11 +189,7 @@ fetchWith fetcher baseUrl req = do
         (Bi.bitraverse (pure . TE.decodeUtf8 . CI.original) fromHaskellByteString)
         headerSeeds
   mbody <- mapM (fromBody . fst) req.requestBody
-  let reqInit =
-        newDictionary @RequestInitFields do
-          maybe PL.id (setPartialField "body" . nonNull . nonNull) (guardMethod (CI.mk req.requestMethod) mbody)
-            PL.. setPartialField "method" (nonNull meth)
-            PL.. setPartialField "headers" (nonNull $ inject hdrs)
+  reqInit <- newReqInit meth hdrs mbody
   reqInitStr <- js_stringify reqInit
   consoleLog reqInitStr
   res <- await =<< js_handle_fetch =<< fetcher (unsafeCast url) (nonNull reqInit)
@@ -224,10 +219,11 @@ fetchWith fetcher baseUrl req = do
               <$> getDictField "message" res
       )
 
-guardMethod :: CI.CI BS.ByteString -> Maybe BodyInit -> Maybe BodyInit
-guardMethod meth body = do
-  guard $ meth /= "GET" && meth /= "HEAD"
-  body
+newReqInit :: JSByteString -> JSRecord JSByteStringClass JSByteStringClass -> Maybe BodyInit -> IO RequestInit
+newReqInit meth hdrs mbody = do
+  case mbody of
+    Nothing -> js_new_req_init_nobody meth hdrs
+    Just body -> js_new_req_nobody meth hdrs body
 
 type FetchResultFields =
   '[ '("result", EnumClass '["ok", "statusError", "error"])
@@ -256,3 +252,9 @@ foreign import javascript unsafe "JSON.stringify($1)"
 
 foreign import javascript unsafe "new Uint8Array($1)"
   cloneByteArray :: JSByteArray c -> IO (JSByteArray c)
+
+foreign import javascript unsafe "{ method: $1, headers: $2 }"
+  js_new_req_init_nobody :: JSByteString -> JSRecord JSByteStringClass JSByteStringClass -> IO RequestInit
+
+foreign import javascript unsafe "{ method: $1, headers: $2, body: $3 }"
+  js_new_req_nobody :: JSByteString -> JSRecord JSByteStringClass JSByteStringClass -> BodyInit -> IO RequestInit
