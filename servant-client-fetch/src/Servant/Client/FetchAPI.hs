@@ -36,6 +36,7 @@ import Data.Foldable qualified as F
 import Data.Map.Strict qualified as Map
 import Data.Monoid
 import Data.Sequence qualified as Seq
+import Data.String (fromString)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
@@ -156,6 +157,7 @@ fetchWith ::
   Request ->
   IO (Either ClientError Servant.Response)
 fetchWith fetcher baseUrl req = do
+  consoleLog $ fromString $ "fetchWith: " <> show req
   let path =
         fromText $
           TE.decodeUtf8 $
@@ -242,3 +244,6 @@ foreign import javascript safe "fetch($1, $2)"
 
 foreign import javascript safe "$1.fetch($2, $3)"
   js_fetch_of :: JSObject a -> Fetcher
+
+foreign import javascript unsafe "console.log($1)"
+  consoleLog :: USVString -> IO ()
