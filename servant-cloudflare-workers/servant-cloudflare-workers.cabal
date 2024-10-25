@@ -111,7 +111,6 @@ library
     Servant.Cloudflare.Workers.Prelude
     Servant.Cloudflare.Workers.R2
     Servant.Cloudflare.Workers.ReadableStream
-    Servant.Cloudflare.Workers.UVerb
 
   -- Bundled with GHC: Lower bound to not force re-installs
   -- text and mtl are bundled starting with GHC-8.4
@@ -149,7 +148,6 @@ library
     network-uri,
     resourcet >=1.2.2 && <1.4,
     safe-exceptions,
-    sop-core >=0.4.0.0 && <0.6,
     streaming-bytestring,
     tagged >=0.8.6 && <0.9,
     transformers-base >=0.4.5.2 && <0.5,

@@ -129,7 +129,6 @@ module Servant.Cloudflare.Workers (
   -- * Re-exports
   FetchHandler,
   Tagged (..),
-  module Servant.Cloudflare.Workers.UVerb,
 ) where
 
 import Control.Exception.Safe (displayException, tryAny)
@@ -148,7 +147,6 @@ import Network.Cloudflare.Worker.Handler
 import Network.Cloudflare.Worker.Handler.Fetch
 import Servant.Cloudflare.Workers.Internal
 import Servant.Cloudflare.Workers.Internal.Response (toWorkerResponse)
-import Servant.Cloudflare.Workers.UVerb
 
 -- * Implementing Servers
 
