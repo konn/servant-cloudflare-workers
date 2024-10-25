@@ -139,12 +139,12 @@ library
     ghc-wasm-jsobjects,
     http-types >=0.12.2 && <0.13,
     mime-types,
-    monad-control >=1.0.2.3 && <1.1,
     network-uri,
     safe-exceptions,
     streaming-bytestring,
     tagged >=0.8.6 && <0.9,
     transformers-base >=0.4.5.2 && <0.5,
+    unliftio-core,
     wasm-linear-base,
     web-sys-hs,
 

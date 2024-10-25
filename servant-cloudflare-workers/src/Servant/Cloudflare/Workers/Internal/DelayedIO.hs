@@ -17,6 +17,7 @@ import Control.Monad.Base (
 import Control.Monad.Catch (
   MonadThrow (..),
  )
+import Control.Monad.IO.Unlift ()
 import Control.Monad.Reader (
   MonadReader (..),
   ReaderT (..),
@@ -25,9 +26,6 @@ import Control.Monad.Reader (
 import Control.Monad.Trans (
   MonadIO (..),
   MonadTrans (..),
- )
-import Control.Monad.Trans.Control (
-  MonadBaseControl (..),
  )
 import GHC.Wasm.Object.Builtins
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
@@ -56,13 +54,6 @@ instance MonadBase IO (DelayedIO e) where
 
 liftRouteResult :: RouteResult a -> DelayedIO e a
 liftRouteResult x = DelayedIO $ lift $ RouteResultT . return $ x
-
-instance MonadBaseControl IO (DelayedIO e) where
-  type StM (DelayedIO e) a = RouteResult a
-  liftBaseWith f = DelayedIO $ ReaderT $ \req ->
-    liftBaseWith $ \runInBase -> f $ \x ->
-      runInBase (runReaderT (runDelayedIO' x) req)
-  restoreM = DelayedIO . lift . restoreM
 
 runDelayedIO :: DelayedIO e a -> RoutingRequest -> JSObject e -> FetchContext -> IO (RouteResult a)
 runDelayedIO m request bindings fetchContext = runRouteResultT $ runReaderT (runDelayedIO' m) HandlerEnv {..}

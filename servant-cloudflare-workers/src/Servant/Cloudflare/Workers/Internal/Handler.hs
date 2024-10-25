@@ -24,9 +24,6 @@ module Servant.Cloudflare.Workers.Internal.Handler (
   getRemainingPathPieces,
 ) where
 
-import Control.Monad.Base (
-  MonadBase (..),
- )
 import Control.Monad.Catch (
   MonadCatch,
   MonadMask,
@@ -36,13 +33,8 @@ import Control.Monad.Error.Class (
   MonadError (..),
   throwError,
  )
-import Control.Monad.IO.Class (
-  MonadIO,
- )
+import Control.Monad.IO.Unlift
 import Control.Monad.Reader.Class (MonadReader, asks)
-import Control.Monad.Trans.Control (
-  MonadBaseControl (..),
- )
 import Control.Monad.Trans.Except (
   ExceptT (..),
   runExceptT,
@@ -130,18 +122,6 @@ instance Show ServerReturn where
 
 instance MonadFail (Handler e) where
   fail str = throwError err500 {errBody = fromString str}
-
-instance MonadBase IO (Handler e) where
-  liftBase = Handler . liftBase
-
-instance MonadBaseControl IO (Handler e) where
-  type StM (Handler e) a = Either ServerReturn (a, WorkerResponse -> Ap IO ())
-
-  -- liftBaseWith :: (RunInBase Handler IO -> IO a) -> Handler a
-  liftBaseWith f = Handler (liftBaseWith (\g -> f (g . runHandler')))
-
-  -- restoreM :: StM Handler a -> Handler a
-  restoreM st = Handler (restoreM st)
 
 runHandler :: RoutingRequest -> JSObject e -> FetchContext -> Handler e a -> IO (Either ServerReturn (a, WorkerResponse -> Ap IO ()))
 runHandler request bindings fetchContext = flip runReaderT HandlerEnv {..} . runExceptT . runWriterT . runHandler'

@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -11,24 +12,13 @@ module Servant.Cloudflare.Workers.Internal.RouteResult (
 
 import Control.Monad (
   ap,
-  liftM,
- )
-import Control.Monad.Base (
-  MonadBase (..),
  )
 import Control.Monad.Catch (
   MonadThrow (..),
  )
+import Control.Monad.IO.Unlift
 import Control.Monad.Trans (
-  MonadIO (..),
   MonadTrans (..),
- )
-import Control.Monad.Trans.Control (
-  ComposeSt,
-  MonadBaseControl (..),
-  MonadTransControl (..),
-  defaultLiftBaseWith,
-  defaultRestoreM,
  )
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.Cloudflare.Workers.Internal.ServerError
@@ -77,19 +67,6 @@ instance (Monad m) => Monad (RouteResultT m) where
 
 instance (MonadIO m) => MonadIO (RouteResultT m) where
   liftIO = lift . liftIO
-
-instance (MonadBase b m) => MonadBase b (RouteResultT m) where
-  liftBase = lift . liftBase
-
-instance (MonadBaseControl b m) => MonadBaseControl b (RouteResultT m) where
-  type StM (RouteResultT m) a = ComposeSt RouteResultT m a
-  liftBaseWith = defaultLiftBaseWith
-  restoreM = defaultRestoreM
-
-instance MonadTransControl RouteResultT where
-  type StT RouteResultT a = RouteResult a
-  liftWith f = RouteResultT $ liftM return $ f runRouteResultT
-  restoreT = RouteResultT
 
 instance (MonadThrow m) => MonadThrow (RouteResultT m) where
   throwM = lift . throwM
