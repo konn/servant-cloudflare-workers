@@ -9,6 +9,8 @@
 module Servant.Cloudflare.Workers.Generic (
   AsWorkerT,
   AsWorker,
+  genericCompileWorker,
+  genericCompileWorkerContext,
   genericServe,
   genericServeT,
   genericServeTWithContext,
@@ -22,9 +24,35 @@ import Data.Kind (
 import Data.Proxy (
   Proxy (..),
  )
+import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Servant.API.Generic
 import Servant.Cloudflare.Workers
 import Servant.Cloudflare.Workers.Internal
+
+genericCompileWorker ::
+  forall e routes.
+  ( HasWorker e (ToServantApi routes) '[]
+  , GenericServant routes (AsWorker e)
+  , ToServant routes (AsWorker e)
+      ~ Worker e (ToServantApi routes)
+  ) =>
+  routes (AsWorker e) ->
+  IO JSHandlers
+genericCompileWorker = compileWorker @e @(ToServantApi routes) . genericWorkerT @e @routes
+
+genericCompileWorkerContext ::
+  forall e routes ctx.
+  ( HasWorker e (ToServantApi routes) ctx
+  , WorkerContext ctx
+  , GenericServant routes (AsWorker e)
+  , ToServant routes (AsWorker e)
+      ~ Worker e (ToServantApi routes)
+  ) =>
+  (JSObject e -> FetchContext -> IO (Context ctx)) ->
+  routes (AsWorker e) ->
+  IO JSHandlers
+genericCompileWorkerContext ctx =
+  compileWorkerWithContext @e @(ToServantApi routes) ctx . genericWorkerT @e @routes
 
 -- | Transform a record of routes into a WAI 'Application'.
 genericServe ::

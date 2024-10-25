@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -12,13 +13,14 @@ most likely just need 'serve'.
 -}
 module Servant.Cloudflare.Workers (
   -- * Run a wai application from an API
+  compileWorkerWithContext,
+  compileWorker,
   serve,
   serveWithContext,
   serveWithContextT,
   WorkerContext,
   JSHandlers,
   JSObject (..),
-  compileWorker,
 
   -- * Construct a wai Application from an API
   toFetchHandler,
@@ -129,6 +131,7 @@ module Servant.Cloudflare.Workers (
   module Servant.Cloudflare.Workers.UVerb,
 ) where
 
+import Control.Exception.Safe (displayException, tryAny)
 import Data.Proxy (
   Proxy (..),
  )
@@ -138,9 +141,12 @@ import Data.Tagged (
 import Data.Text (
   Text,
  )
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Encoding as LTE
 import Network.Cloudflare.Worker.Handler
 import Network.Cloudflare.Worker.Handler.Fetch
 import Servant.Cloudflare.Workers.Internal
+import Servant.Cloudflare.Workers.Internal.Response (toWorkerResponse)
 import Servant.Cloudflare.Workers.UVerb
 
 -- * Implementing Servers
@@ -155,8 +161,25 @@ type WorkerContext context =
   ( HasContextEntry (context .++ DefaultErrorFormatters) ErrorFormatters
   )
 
-compileWorker :: FetchHandler e -> IO JSHandlers
-compileWorker fetch = toJSHandlers Handlers {fetch}
+compileWorkerWithContext ::
+  forall e api ctx.
+  (HasWorker e api ctx, WorkerContext ctx) =>
+  (JSObject e -> FetchContext -> IO (Context ctx)) ->
+  Worker e api ->
+  IO JSHandlers
+compileWorkerWithContext ctx act =
+  toJSHandlers
+    Handlers
+      { fetch = \req env fctx -> do
+          ectx <- tryAny $ ctx env fctx
+          case ectx of
+            Right workCtx -> serveWithContext @e @api Proxy Proxy workCtx act req env fctx
+            Left exc ->
+              toWorkerResponse $ responseServerError err500 {errBody = "Internal server error: " <> LTE.encodeUtf8 (LT.pack $ displayException exc)}
+      }
+
+compileWorker :: forall e api. (HasWorker e api '[]) => Worker e api -> IO JSHandlers
+compileWorker = compileWorkerWithContext @e @api (const $ const $ pure EmptyContext)
 
 {- | 'serve' allows you to implement an API and produce a wai 'Application'.
 
