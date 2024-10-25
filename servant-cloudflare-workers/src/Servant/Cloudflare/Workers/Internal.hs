@@ -1271,24 +1271,6 @@ type HasWorkerArrowTypeError a b =
     ':$$: 'Text "and"
     ':$$: 'ShowType b
 
--- Erroring instances for 'HasWorker' for unknown API combinators
-
--- XXX: This omits the @context@ parameter, e.g.:
---
--- "There is no instance for HasWorker (Bool :> …)". Do we care ?
-instance
-  {-# OVERLAPPABLE #-}
-  ( TypeError
-      ( NoInstanceForSub
-          @(Prototype -> Type -> [Type] -> Constraint)
-          HasWorker
-          ty
-      )
-  ) =>
-  HasWorker e (ty :> sub) context
-
-instance {-# OVERLAPPABLE #-} (TypeError (NoInstanceFor (HasWorker api context))) => HasWorker e api context
-
 {- | Ignore @'Fragment'@ in server handlers.
 See <https://ietf.org/rfc/rfc2616.html#section-15.1.3> for more details.
 
