@@ -49,7 +49,6 @@ common defaults
 library
   import: defaults
   build-depends:
-    aeson,
     bytestring,
     case-insensitive,
     containers,
@@ -57,7 +56,6 @@ library
     ghc-wasm-jsobjects,
     http-media,
     http-types,
-    network-uri,
     safe-exceptions,
     servant,
     servant-client-core,
