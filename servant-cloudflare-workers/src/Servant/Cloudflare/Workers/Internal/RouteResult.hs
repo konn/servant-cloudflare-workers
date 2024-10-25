@@ -4,7 +4,10 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Servant.Cloudflare.Workers.Internal.RouteResult where
+module Servant.Cloudflare.Workers.Internal.RouteResult (
+  RouteResult (..),
+  RouteResultT (..),
+) where
 
 import Control.Monad (
   ap,

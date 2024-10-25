@@ -1,6 +1,10 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 
-module Servant.Cloudflare.Workers.Internal.RoutingApplication where
+module Servant.Cloudflare.Workers.Internal.RoutingApplication (
+  RoutingRequest (..),
+  RoutingApplication,
+  toFetchHandler,
+) where
 
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE

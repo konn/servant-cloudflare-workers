@@ -2,7 +2,51 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Servant.Cloudflare.Workers.Internal.ServerError where
+module Servant.Cloudflare.Workers.Internal.ServerError (
+  ServerError (..),
+  responseServerError,
+
+  -- * Errors
+
+  -- ** 3XX
+  err300,
+  err301,
+  err302,
+  err303,
+  err304,
+  err305,
+  err307,
+
+  -- ** 4XX
+  err400,
+  err401,
+  err402,
+  err403,
+  err404,
+  err405,
+  err406,
+  err407,
+  err409,
+  err410,
+  err411,
+  err412,
+  err413,
+  err414,
+  err415,
+  err416,
+  err417,
+  err418,
+  err422,
+  err429,
+
+  -- ** 5XX
+  err500,
+  err501,
+  err502,
+  err503,
+  err504,
+  err505,
+) where
 
 import Control.Exception (
   Exception,
