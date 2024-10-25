@@ -60,7 +60,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Typeable
 import GHC.Generics
-import GHC.TypeLits (ErrorMessage (..), KnownNat, KnownSymbol, TypeError, symbolVal)
+import GHC.TypeLits (KnownNat, KnownSymbol, TypeError, symbolVal)
 import GHC.Wasm.Object.Builtins
 import GHC.Wasm.Web.ReadableStream (ReadableStream, toReadableStream)
 import qualified GHC.Wasm.Web.ReadableStream as RS
@@ -1238,38 +1238,6 @@ instance
   type WorkerT e (arr :> sub) _ = TypeError (PartialApplication (HasWorker :: Prototype -> Type -> [Type] -> Constraint) arr)
   route = error "unreachable"
   hoistWorkerWithContext _ _ _ _ = error "unreachable"
-
-{- | This instance prevents from accidentally using '->' instead of ':>'
-
->>> serve (Proxy :: Proxy (Capture "foo" Int -> Get '[JSON] Int)) (error "...")
-...
-...No instance HasWorker (a -> b).
-...Maybe you have used '->' instead of ':>' between
-...Capture' '[] "foo" Int
-...and
-...Verb 'GET 200 '[JSON] Int
-...
-
->>> undefined :: Worker (Capture "foo" Int -> Get '[JSON] Int)
-...
-...No instance HasWorker (a -> b).
-...Maybe you have used '->' instead of ':>' between
-...Capture' '[] "foo" Int
-...and
-...Verb 'GET 200 '[JSON] Int
-...
--}
-instance (TypeError (HasWorkerArrowTypeError a b)) => HasWorker e (a -> b) context where
-  type WorkerT e (a -> b) m = TypeError (HasWorkerArrowTypeError a b)
-  route _ _ _ = error "servant-server panic: impossible happened in HasWorker (a -> b)"
-  hoistWorkerWithContext _ _ _ _ = id
-
-type HasWorkerArrowTypeError a b =
-  'Text "No instance HasWorker (a -> b)."
-    ':$$: 'Text "Maybe you have used '->' instead of ':>' between "
-    ':$$: 'ShowType a
-    ':$$: 'Text "and"
-    ':$$: 'ShowType b
 
 {- | Ignore @'Fragment'@ in server handlers.
 See <https://ietf.org/rfc/rfc2616.html#section-15.1.3> for more details.
