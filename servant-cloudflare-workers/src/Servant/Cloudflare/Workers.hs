@@ -33,6 +33,7 @@ module Servant.Cloudflare.Workers (
   Handler (..),
   runHandler,
   earlyReturn,
+  serverError,
   getEnv,
   getSecret,
   getBinding,

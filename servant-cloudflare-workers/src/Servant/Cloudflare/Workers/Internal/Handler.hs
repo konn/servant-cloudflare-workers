@@ -159,3 +159,6 @@ getBinding l = asks $ Bindings.getBinding l . bindings
 
 earlyReturn :: RoutingResponse -> Handler e a
 earlyReturn = Handler . throwError . Response
+
+serverError :: forall e a. ServerError -> Handler e a
+serverError = Handler . throwError . Error
