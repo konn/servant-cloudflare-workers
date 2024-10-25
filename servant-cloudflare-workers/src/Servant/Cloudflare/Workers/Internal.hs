@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Servant.Cloudflare.Workers.Internal (
   module Servant.Cloudflare.Workers.Internal,
@@ -58,6 +59,7 @@ import Data.Tagged (
  )
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import Data.Traversable (forM)
 import Data.Typeable
 import GHC.Generics
 import GHC.TypeLits (KnownNat, KnownSymbol, TypeError, symbolVal)
@@ -391,7 +393,7 @@ methodRouter ::
 methodRouter splitHeaders method proxy status action = leafRouter route'
   where
     route' :: env -> RoutingApplication e
-    route' env request obj fctx respond =
+    route' env request obj fctx =
       let accH = getAcceptHeader request.rawRequest
        in runAction
             ( action
@@ -402,7 +404,7 @@ methodRouter splitHeaders method proxy status action = leafRouter route'
             request
             obj
             fctx
-            respond
+            pure
             $ \output -> do
               let (headers, b) = splitHeaders output
               case handleAcceptH proxy accH b of
@@ -418,14 +420,14 @@ noContentRouter ::
   Router e env
 noContentRouter method status action = leafRouter route'
   where
-    route' env request b ctx respond =
+    route' env request b ctx =
       runAction
         (action `addMethodCheck` methodCheck method request)
         env
         request
         b
         ctx
-        respond
+        pure
         $ \_output ->
           Route $ responseLBS status [] ""
 
@@ -518,7 +520,7 @@ streamRouter ::
   Proxy ctype ->
   Delayed e env (Handler e c) ->
   Router e env
-streamRouter splitHeaders method status _ ctypeproxy action = leafRouter $ \env request b fctx respond ->
+streamRouter splitHeaders method status _ ctypeproxy action = leafRouter $ \env request b fctx ->
   let AcceptHeader accH = getAcceptHeader request.rawRequest
       cmediatype = NHM.matchAccept [contentType ctypeproxy] accH
       accCheck = when (isNothing cmediatype) $ delayedFail err406
@@ -532,7 +534,7 @@ streamRouter splitHeaders method status _ ctypeproxy action = leafRouter $ \env 
         request
         b
         fctx
-        respond
+        pure
         $ \output ->
           let (headers, fa) = splitHeaders output
            in Route $ responseStream status (contentHeader : headers) (toReadableStream' fa)
@@ -922,18 +924,12 @@ instance HasWorker e Raw context where
 
   hoistWorkerWithContext _ _ _ _ = retag
 
-  route _ Proxy _ rawApplication = RawRouter $ \env request wenv fctx respond -> runResourceT $ do
+  route _ Proxy _ rawApplication = RawRouter $ \env request wenv fctx -> runResourceT $ do
     -- note: a Raw application doesn't register any cleanup
     -- but for the sake of consistency, we nonetheless run
     -- the cleanup once its done
     r <- runDelayed rawApplication env request wenv fctx
-    liftIO $ go r request wenv fctx respond
-    where
-      go r request wenv fctx respond = case r of
-        FastReturn rsp -> pure rsp
-        Route app -> untag app request wenv fctx
-        Fail a -> respond $ Fail a
-        FailFatal e -> respond $ FailFatal e
+    liftIO $ mapM (\app -> RawResponse <$> untag app request wenv fctx) r
 
 {- | Just pass the request to the underlying application and serve its response.
 
@@ -950,26 +946,19 @@ instance HasWorker e RawM context where
       RoutingRequest ->
       JSObject e ->
       FetchContext ->
-      (RouteResult RoutingResponse -> IO WorkerResponse) ->
       m WorkerResponse
 
-  route _ _ _ handleDelayed = RawRouter $ \env request wenv fctx respond -> runResourceT $ do
+  route _ _ _ handleDelayed = RawRouter $ \env request wenv fctx -> runResourceT $ do
     routeResult <- runDelayed handleDelayed env request wenv fctx
-    let respond' = liftIO . respond
-    liftIO $ case routeResult of
-      Route handler ->
-        runHandler request wenv fctx (handler request wenv fctx respond)
+    forM routeResult \handler ->
+      liftIO $
+        runHandler request wenv fctx (handler request wenv fctx)
           >>= \case
-            Left (Error e) -> respond' $ FailFatal e
-            Left (Response r) -> toWorkerResponse r
-            Right (rsp, final) -> rsp <$ liftIO (getAp $ final rsp)
-      {- runHandler (handler request.rawRequest fctx)
-        -}
-      Fail e -> respond' $ Fail e
-      FailFatal e -> respond' $ FailFatal e
-      FastReturn r -> pure r
+            Left (Error e) -> pure $ responseServerError e
+            Left (Response r) -> pure r
+            Right (rsp, final) -> RawResponse rsp <$ liftIO (getAp $ final rsp)
 
-  hoistWorkerWithContext _ _ _ f srvM = \req b fctx respond -> f (srvM req b fctx respond)
+  hoistWorkerWithContext _ _ _ f srvM = \req b fctx -> f (srvM req b fctx)
 
 {- | If you use 'ReqBody' in one of the endpoints for your API,
 this automatically requires your server-side handler to be a function

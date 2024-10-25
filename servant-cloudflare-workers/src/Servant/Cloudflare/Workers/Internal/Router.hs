@@ -24,7 +24,6 @@ import Data.Typeable (
   TypeRep,
  )
 import Servant.Cloudflare.Workers.Internal.ErrorFormatter
-import Servant.Cloudflare.Workers.Internal.Response
 import Servant.Cloudflare.Workers.Internal.RouteResult
 import Servant.Cloudflare.Workers.Internal.RoutingApplication
 import Servant.Cloudflare.Workers.Internal.ServerError
@@ -186,46 +185,42 @@ routerLayout router =
     mkSubTree True path children = ("├─ " <> path <> "/") : map ("│  " <>) children
     mkSubTree False path children = ("└─ " <> path <> "/") : map ("   " <>) children
 
--- | Apply a transformation to the response of a `Router`.
-tweakResponse :: (RouteResult RoutingResponse -> RouteResult RoutingResponse) -> Router b env -> Router b env
-tweakResponse f = fmap (\a -> \req b c cont -> a req b c (cont . f))
-
 -- | Interpret a router as an application.
 runRouter :: NotFoundErrorFormatter -> Router b () -> RoutingApplication b
 runRouter fmt r = runRouterEnv fmt r ()
 
 runRouterEnv :: NotFoundErrorFormatter -> Router b env -> env -> RoutingApplication b
-runRouterEnv fmt router env request b ctx respond =
+runRouterEnv fmt router env request b ctx =
   case router of
     StaticRouter table ls ->
       case pathInfo request of
-        [] -> runChoice fmt ls env request b ctx respond
+        [] -> runChoice fmt ls env request b ctx
         -- This case is to handle trailing slashes.
-        [""] -> runChoice fmt ls env request b ctx respond
+        [""] -> runChoice fmt ls env request b ctx
         first : rest
           | Just router' <- M.lookup first table ->
               let request' = request {pathInfo = rest}
-               in runRouterEnv fmt router' env request' b ctx respond
-        _ -> respond $ Fail $ fmt request.rawRequest
+               in runRouterEnv fmt router' env request' b ctx
+        _ -> pure $ Fail $ fmt request.rawRequest
     CaptureRouter _ router' ->
       case pathInfo request of
-        [] -> respond $ Fail $ fmt request.rawRequest
+        [] -> pure $ Fail $ fmt request.rawRequest
         -- This case is to handle trailing slashes.
-        [""] -> respond $ Fail $ fmt request.rawRequest
+        [""] -> pure $ Fail $ fmt request.rawRequest
         first : rest ->
           let request' = request {pathInfo = rest}
-           in runRouterEnv fmt router' (first, env) request' b ctx respond
+           in runRouterEnv fmt router' (first, env) request' b ctx
     CaptureAllRouter _ router' ->
       let segments = case pathInfo request of
             -- this case is to handle trailing slashes.
             ("" : xs) -> xs
             xs -> xs
           request' = request {pathInfo = []}
-       in runRouterEnv fmt router' (segments, env) request' b ctx respond
+       in runRouterEnv fmt router' (segments, env) request' b ctx
     RawRouter app ->
-      app env request b ctx respond
+      app env request b ctx
     Choice r1 r2 ->
-      runChoice fmt [runRouterEnv fmt r1, runRouterEnv fmt r2] env request b ctx respond
+      runChoice fmt [runRouterEnv fmt r1, runRouterEnv fmt r2] env request b ctx
 
 {- | Try a list of routing applications in order.
 We stop as soon as one fails fatally or succeeds.
@@ -234,15 +229,16 @@ If all fail normally, we pick the "best" error.
 runChoice :: NotFoundErrorFormatter -> [env -> RoutingApplication b] -> env -> RoutingApplication b
 runChoice fmt ls =
   case ls of
-    [] -> \_ request _ _ respond -> respond $ Fail $ fmt $ rawRequest request
+    [] -> \_ request _ _ -> pure $ Fail $ fmt $ rawRequest request
     [r] -> r
     (r : rs) ->
-      \env request b e respond ->
-        r env request b e $ \response1 ->
-          case response1 of
-            Fail _ -> runChoice fmt rs env request b e $ \response2 ->
-              respond $ highestPri response1 response2
-            _ -> respond response1
+      \env request b e -> do
+        response1 <- r env request b e
+        case response1 of
+          Fail _ -> do
+            response2 <- runChoice fmt rs env request b e
+            pure $ highestPri response1 response2
+          _ -> pure response1
   where
     highestPri (Fail e1) (Fail e2) =
       if worseHTTPCode (errHTTPCode e1) (errHTTPCode e2)
