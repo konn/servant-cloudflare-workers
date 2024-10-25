@@ -11,7 +11,7 @@ import Network.HTTP.Types
 import Servant.API.Generic
 import Servant.Cloudflare.Workers hiding (respond)
 import Servant.Cloudflare.Workers.Generic
-import Servant.Cloudflare.Workers.Internal.Response (responseLBS, toWorkerResponse)
+import Servant.Cloudflare.Workers.Internal.Response (responseBS, toWorkerResponse)
 import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest)
 import Servant.Cloudflare.Workers.Prelude ((:<|>) (..))
 
@@ -45,7 +45,7 @@ instance {-# OVERLAPPABLE #-} (MonadError ServerError m) => ThrowAll (m a) where
 instance {-# OVERLAPPING #-} (MonadError ServerError m) => ThrowAll (Tagged m (RoutingRequest -> JSObject e -> FetchContext -> IO WorkerResponse)) where
   throwAll e = Tagged $ \_req _ _ ->
     toWorkerResponse $
-      responseLBS
+      responseBS
         (mkStatus (errHTTPCode e) (BS.pack $ errReasonPhrase e))
         (errHeaders e)
         (errBody e)

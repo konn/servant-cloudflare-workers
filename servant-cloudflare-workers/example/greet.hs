@@ -10,9 +10,9 @@ module Main (handlers, main) where
 
 import Data.Aeson
 import Data.Maybe (fromMaybe)
-import Data.Proxy
 import Data.Text
 import GHC.Generics
+import GHC.Wasm.Object.Builtins (AnyClass)
 import Prelude.Compat
 import Servant.Cloudflare.Workers.Cache (CacheOptions (..), serveCached)
 import Servant.Cloudflare.Workers.Generic ()
@@ -53,9 +53,6 @@ data OtherRoutes mode = OtherRoutes
   }
   deriving (Generic)
 
-testApi :: Proxy TestApi
-testApi = Proxy
-
 -- Server-side handlers.
 --
 -- There's one handler per endpoint, which, just like in the type
@@ -85,7 +82,7 @@ server = helloH :<|> postGreetH :<|> deleteGreetH :<|> otherRoutes
 -- Turn the server into a WAI app. 'serve' is provided by servant,
 -- more precisely by the Servant.Cloudflare.Workers module.
 handlers :: IO JSHandlers
-handlers = compileWorker $ serve Proxy testApi server
+handlers = compileWorker @AnyClass @TestApi server
 
 foreign export javascript "handlers" handlers :: IO JSHandlers
 

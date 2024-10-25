@@ -173,6 +173,7 @@ executable greet
     aeson >=1.4.1.0 && <3,
     base,
     base-compat,
+    ghc-wasm-jsobjects,
     servant-cloudflare-workers,
     text,
 

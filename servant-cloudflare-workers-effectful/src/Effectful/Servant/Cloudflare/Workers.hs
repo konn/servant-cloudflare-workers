@@ -105,8 +105,7 @@ import Data.Aeson qualified as A
 import Data.Kind (Constraint)
 import Data.Monoid (Ap (..))
 import Data.Text qualified as T
-import Data.Text.Lazy qualified as LT
-import Data.Text.Lazy.Encoding qualified as LTE
+import Data.Text.Encoding qualified as TE
 import Data.Unique qualified as DU
 import Effectful hiding (type (:>))
 import Effectful qualified
@@ -232,7 +231,7 @@ compileWorkerContext ctx act = runEff $ unsafeEff \es ->
           case ectx of
             Right workCtx -> runWorkerContext @e @api es workCtx act req env fctx
             Left exc ->
-              toWorkerResponse $ responseServerError err500 {errBody = "Internal server error: " <> LTE.encodeUtf8 (LT.pack $ displayException exc)}
+              toWorkerResponse $ responseServerError err500 {errBody = "Internal server error: " <> TE.encodeUtf8 (T.pack $ displayException exc)}
       }
 
 genericCompileWorkerContext ::
@@ -340,7 +339,7 @@ handleEarlyReturn act = do
                 Left $
                   Error $
                     err500
-                      { errBody = "Internal server error: " <> LTE.encodeUtf8 (LT.pack $ displayException exc)
+                      { errBody = "Internal server error: " <> TE.encodeUtf8 (T.pack $ displayException exc)
                       }
     )
     (Right <$> act)

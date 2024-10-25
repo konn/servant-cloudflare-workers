@@ -7,7 +7,7 @@ module Servant.Cloudflare.Workers.Internal.ServerError where
 import Control.Exception (
   Exception,
  )
-import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Network.Cloudflare.Worker.Response (
@@ -19,7 +19,7 @@ import Servant.Cloudflare.Workers.Internal.Response
 data ServerError = ServerError
   { errHTTPCode :: Int
   , errReasonPhrase :: String
-  , errBody :: LBS.ByteString
+  , errBody :: BS.ByteString
   , errHeaders :: [HTTP.Header]
   }
   deriving (Show, Eq, Read)
@@ -30,7 +30,7 @@ responseServerError :: ServerError -> RoutingResponse
 responseServerError ServerError {..} =
   RouteResponse
     PartialResponse
-      { body = Just $ WorkerResponseLBS errBody
+      { body = Just $ WorkerResponseBS errBody
       , headers = errHeaders
       , status =
           HTTP.Status

@@ -142,8 +142,8 @@ import Data.Tagged (
 import Data.Text (
   Text,
  )
-import qualified Data.Text.Lazy as LT
-import qualified Data.Text.Lazy.Encoding as LTE
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Network.Cloudflare.Worker.Handler
 import Network.Cloudflare.Worker.Handler.Fetch
 import Servant.Cloudflare.Workers.Internal
@@ -176,7 +176,7 @@ compileWorkerWithContext ctx act =
           case ectx of
             Right workCtx -> serveWithContext @e @api Proxy Proxy workCtx act req env fctx
             Left exc ->
-              toWorkerResponse $ responseServerError err500 {errBody = "Internal server error: " <> LTE.encodeUtf8 (LT.pack $ displayException exc)}
+              toWorkerResponse $ responseServerError err500 {errBody = "Internal server error: " <> TE.encodeUtf8 (T.pack $ displayException exc)}
       }
 
 compileWorker :: forall e api. (HasWorker e api '[]) => Worker e api -> IO JSHandlers

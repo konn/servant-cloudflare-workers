@@ -6,6 +6,7 @@ module Servant.Cloudflare.Workers.Internal.Response (
   toWorkerResponse,
   fromPartialResponse,
   responseLBS,
+  responseBS,
 ) where
 
 import Control.Monad (guard)
@@ -73,4 +74,21 @@ responseLBS status headers bdy =
       , body = do
           guard $ not $ LBS.null bdy
           Just $ WorkerResponseLBS bdy
+      }
+
+responseBS ::
+  Status ->
+  [(HeaderName, BS.StrictByteString)] ->
+  BS.ByteString ->
+  RoutingResponse
+responseBS status headers bdy =
+  RouteResponse
+    PartialResponse
+      { status = status
+      , headers
+      , encodeBody = Nothing
+      , cloudflare = Nothing
+      , body = do
+          guard $ not $ BS.null bdy
+          Just $ WorkerResponseBS bdy
       }

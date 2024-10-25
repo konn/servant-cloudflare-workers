@@ -13,7 +13,7 @@ module Servant.Cloudflare.Workers.Internal.ErrorFormatter (
   mkContextWithErrorFormatter,
 ) where
 
-import qualified Data.ByteString.Lazy.Char8 as BSL8
+import qualified Data.ByteString.Char8 as BS8
 import Data.Kind (Type)
 import Data.Typeable
 import Network.Cloudflare.Worker.Request (WorkerRequest)
@@ -77,7 +77,7 @@ mkContextWithErrorFormatter ctx = ctx .++ (defaultErrorFormatters :. EmptyContex
 -- Internal
 
 err400Formatter :: ErrorFormatter
-err400Formatter _ _ e = err400 {errBody = BSL8.pack e}
+err400Formatter _ _ e = err400 {errBody = BS8.pack e}
 
 -- These definitions suppress "unused import" warning.
 -- The imorts are needed for Haddock to correctly link to them.
