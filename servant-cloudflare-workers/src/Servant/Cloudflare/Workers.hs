@@ -30,7 +30,7 @@ module Servant.Cloudflare.Workers (
   Worker,
   EmptyServer,
   emptyServer,
-  Handler (..),
+  Handler,
   runHandler,
   earlyReturn,
   serverError,

@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -7,7 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Servant.Cloudflare.Workers.Internal.Handler (
-  Handler (..),
+  Handler (),
   Finaliser,
   addFinaliser,
   runHandler,
@@ -24,32 +25,31 @@ module Servant.Cloudflare.Workers.Internal.Handler (
   getRemainingPathPieces,
 ) where
 
+import Control.Concurrent.MVar (MVar, modifyMVar_, newMVar, readMVar)
+import Control.Exception (evaluate)
+import Control.Exception.Safe (Exception, throwM)
+import qualified Control.Exception.Safe as Safe
+import Control.Monad (forM)
 import Control.Monad.Catch (
   MonadCatch,
   MonadMask,
   MonadThrow,
  )
+import qualified Control.Monad.Catch as Unsafe
 import Control.Monad.Error.Class (
   MonadError (..),
   throwError,
  )
 import Control.Monad.IO.Unlift
-import Control.Monad.Reader.Class (MonadReader, asks)
-import Control.Monad.Trans.Except (
-  ExceptT (..),
-  runExceptT,
- )
+import Control.Monad.Reader (MonadReader (..))
+import Control.Monad.Reader.Class (asks)
 import Control.Monad.Trans.Reader (ReaderT (..))
-import Control.Monad.Trans.Writer.Strict (WriterT, runWriterT, tell)
 import qualified Data.Aeson as J
+import qualified Data.Bifunctor as Bi
 import Data.Monoid (Ap (..))
-import Data.String (
-  fromString,
- )
+import Data.String (fromString)
 import qualified Data.Text as T
-import GHC.Generics (
-  Generic,
- )
+import GHC.Generics (Generic)
 import GHC.TypeLits (KnownSymbol)
 import GHC.Wasm.Object.Builtins
 import Network.Cloudflare.Worker.Binding (BindingsClass, ListMember)
@@ -59,12 +59,7 @@ import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.Cloudflare.Workers.Internal.Response
 import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest (..))
-import Servant.Cloudflare.Workers.Internal.ServerError (
-  ServerError,
-  err500,
-  errBody,
-  responseServerError,
- )
+import Servant.Cloudflare.Workers.Internal.ServerError (ServerError, err500, errBody, responseServerError)
 
 data HandlerEnv e = HandlerEnv
   { bindings :: !(JSObject e)
@@ -73,36 +68,53 @@ data HandlerEnv e = HandlerEnv
   }
   deriving (Generic)
 
+data HandlerRep e = HandlerRep
+  { finaliser :: !(MVar Finaliser)
+  , environment :: !(HandlerEnv e)
+  }
+
 type Finaliser = WorkerResponse -> Ap IO ()
 
-newtype Handler e a = Handler {runHandler' :: WriterT Finaliser (ExceptT ServerReturn (ReaderT (HandlerEnv e) IO)) a}
+newtype Handler e a = Handler {runHandler' :: ReaderT (HandlerRep e) IO a}
   deriving stock (Generic)
   deriving newtype
     ( Functor
     , Applicative
     , Monad
     , MonadIO
-    , MonadReader (HandlerEnv e)
+    , MonadUnliftIO
     , MonadThrow
     , MonadCatch
     , MonadMask
     )
 
+instance MonadReader (HandlerEnv e) (Handler e) where
+  ask = Handler $ asks environment
+  local f (Handler m) = Handler $ local (\e -> e {environment = f e.environment}) m
+
 instance MonadError ServerError (Handler e) where
-  throwError = Handler . throwError . Error
+  throwError = Handler . throwM . ServereReturnExc . Error
   catchError (Handler m) f =
     Handler $
-      catchError
+      Unsafe.catch
         m
         ( \case
-            Error err -> runHandler' $ f err
-            l -> throwError l
+            ServereReturnExc (Error err) -> runHandler' $ f err
+            l -> Unsafe.throwM l
         )
 
 data ServerReturn
   = Error ServerError
   | Response RoutingResponse
   deriving (Generic)
+
+newtype ServereReturnExc = ServereReturnExc {unServerReturn :: ServerReturn}
+  deriving (Generic)
+  deriving anyclass (Exception)
+
+instance Show ServereReturnExc where
+  show (ServereReturnExc (Error e)) = "Error " <> show e
+  show (ServereReturnExc (Response _)) = "EarlyReturnResponse (..)"
 
 getRawRequest :: Handler e WorkerRequest
 getRawRequest = asks $ (.rawRequest) . request
@@ -124,10 +136,19 @@ instance MonadFail (Handler e) where
   fail str = throwError err500 {errBody = fromString str}
 
 runHandler :: RoutingRequest -> JSObject e -> FetchContext -> Handler e a -> IO (Either ServerReturn (a, WorkerResponse -> Ap IO ()))
-runHandler request bindings fetchContext = flip runReaderT HandlerEnv {..} . runExceptT . runWriterT . runHandler'
+runHandler request bindings fetchContext (Handler act) = Safe.mask \restore -> do
+  rep <- restore $ do
+    finaliser <- newMVar $! mempty
+    let environment = HandlerEnv {..}
+    pure HandlerRep {..}
+  resl <- Unsafe.try $ runReaderT act rep
+  restore $ forM (Bi.first unServerReturn resl) \a ->
+    (a,) <$> readMVar (finaliser rep)
 
 addFinaliser :: (WorkerResponse -> IO ()) -> Handler e ()
-addFinaliser f = Handler $ tell $ Ap . f
+addFinaliser f = Handler do
+  fin <- asks finaliser
+  liftIO $ modifyMVar_ fin \old -> evaluate $ old <> (Ap . f)
 
 getWorkerEnv :: Handler e (JSObject e)
 getWorkerEnv = asks bindings
@@ -154,7 +175,7 @@ getBinding ::
 getBinding l = asks $ Bindings.getBinding l . bindings
 
 earlyReturn :: RoutingResponse -> Handler e a
-earlyReturn = Handler . throwError . Response
+earlyReturn = Handler . throwM . ServereReturnExc . Response
 
 serverError :: forall e a. ServerError -> Handler e a
-serverError = Handler . throwError . Error
+serverError = Handler . throwM . ServereReturnExc . Error

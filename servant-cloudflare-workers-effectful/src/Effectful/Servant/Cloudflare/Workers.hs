@@ -48,7 +48,7 @@ module Effectful.Servant.Cloudflare.Workers (
   B.Lookup',
   JSObject (..),
   Proxy (..),
-  Handler (..),
+  Handler,
   RoutingRequest (..),
   RoutingResponse (..),
   WorkerRequest,
@@ -97,9 +97,7 @@ module Effectful.Servant.Cloudflare.Workers (
 ) where
 
 import Control.Exception.Safe (Exception, displayException, fromException, handleAny, throwIO, throwString, tryAny)
-import Control.Monad.Error.Class qualified as MTL
 import Control.Monad.Reader.Class qualified as MTL
-import Control.Monad.Trans.Writer.Strict qualified as MTL
 import Data.Aeson (FromJSON, Value, fromJSON)
 import Data.Aeson qualified as A
 import Data.Kind (Constraint)
@@ -130,6 +128,7 @@ import Servant.Cloudflare.Workers.Internal.Handler (
   HandlerEnv (..),
   ServerReturn (..),
  )
+import Servant.Cloudflare.Workers.Internal.Handler qualified as Raw
 import Servant.Cloudflare.Workers.Internal.Response (RoutingResponse (..), toWorkerResponse)
 import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest (..))
 import Servant.Cloudflare.Workers.Internal.ServerError (responseServerError)
@@ -137,7 +136,7 @@ import Servant.Cloudflare.Workers.Prelude (
   Context (EmptyContext),
   FetchHandler,
   GenericServant,
-  Handler (Handler),
+  Handler,
   HasWorker (WorkerT),
   JSHandlers,
   Proxy (..),
@@ -368,7 +367,15 @@ interpretWorker env act = do
   v <- liftIO do
     env' <- cloneEnv env
     unEff (runServantWorker request bindings fetchContext act) env'
-  either (Handler . MTL.liftEither . Left) (Handler . MTL.WriterT . pure) v
+  either
+    ( \case
+        Error err -> Raw.serverError err
+        Response rsp -> Raw.earlyReturn rsp
+    )
+    ( \(a, fin) ->
+        a <$ Raw.addFinaliser (getAp . fin)
+    )
+    v
 
 getFetchContext :: forall e es. (HasUniqueWorkerWith e es) => Eff es FetchContext
 getFetchContext = do

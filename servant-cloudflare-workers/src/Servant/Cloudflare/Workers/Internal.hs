@@ -15,37 +15,20 @@ module Servant.Cloudflare.Workers.Internal (
   module Servant.Cloudflare.Workers.Internal.ServerError,
 ) where
 
-import Control.Monad (
-  join,
- )
-import Control.Monad.Trans (
-  liftIO,
- )
+import Control.Monad (join)
+import Control.Monad.Trans (liftIO)
 import qualified Data.Bifunctor as Bi
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC8
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.CaseInsensitive as CI
 import Data.Constraint (Constraint, Dict (..))
-import Data.Either (
-  partitionEithers,
- )
-import Data.Kind (
-  Type,
- )
-import Data.Maybe (
-  fromMaybe,
-  mapMaybe,
- )
+import Data.Either (partitionEithers)
+import Data.Kind (Type)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Monoid (Ap (..))
-import Data.String (
-  IsString (..),
- )
-import Data.Tagged (
-  Tagged (..),
-  retag,
-  untag,
- )
+import Data.String (IsString (..))
+import Data.Tagged (Tagged (..), retag, untag)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Typeable
@@ -58,10 +41,7 @@ import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import qualified Network.Cloudflare.Worker.Request as Req
 import Network.Cloudflare.Worker.Response (WorkerResponse, WorkerResponseBody (..))
-import Network.HTTP.Types hiding (
-  Header,
-  ResponseHeaders,
- )
+import Network.HTTP.Types hiding (Header, ResponseHeaders)
 import qualified Network.HTTP.Types as H
 import Servant.API (
   Capture',

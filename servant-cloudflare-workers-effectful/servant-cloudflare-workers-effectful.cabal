@@ -77,6 +77,5 @@ library
     servant,
     servant-cloudflare-workers,
     text,
-    transformers,
     vector,
     web-sys-hs,
