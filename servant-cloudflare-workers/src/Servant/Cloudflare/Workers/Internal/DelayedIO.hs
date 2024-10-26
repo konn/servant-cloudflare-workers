@@ -1,9 +1,10 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Servant.Cloudflare.Workers.Internal.DelayedIO (
-  DelayedIO (..),
+  DelayedIO (),
   runDelayedIO,
   withRequest,
   delayedFail,
@@ -11,7 +12,10 @@ module Servant.Cloudflare.Workers.Internal.DelayedIO (
   liftRouteResult,
 ) where
 
+import Control.Arrow ((>>>))
+import Control.Exception (handle, throwIO)
 import Control.Monad.Catch (
+  Exception,
   MonadThrow (..),
  )
 import Control.Monad.IO.Unlift ()
@@ -24,8 +28,10 @@ import Control.Monad.Trans (
   MonadIO (..),
   MonadTrans (..),
  )
+import GHC.Generics (Generic)
 import GHC.Wasm.Object.Builtins
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
+import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.Cloudflare.Workers.Internal.Handler (HandlerEnv (..))
 import Servant.Cloudflare.Workers.Internal.RouteResult
 import Servant.Cloudflare.Workers.Internal.RoutingApplication (RoutingRequest)
@@ -36,7 +42,7 @@ incoming 'Request', may perform 'IO', and result in a
 'RouteResult', meaning they can either succeed, fail
 (with the possibility to recover), or fail fatally.
 -}
-newtype DelayedIO e a = DelayedIO {runDelayedIO' :: ReaderT (HandlerEnv e) (RouteResultT IO) a}
+newtype DelayedIO e a = DelayedIO {runDelayedIO' :: ReaderT (HandlerEnv e) IO a}
   deriving newtype
     ( Functor
     , Applicative
@@ -46,11 +52,38 @@ newtype DelayedIO e a = DelayedIO {runDelayedIO' :: ReaderT (HandlerEnv e) (Rout
     , MonadThrow
     )
 
+data RouteResultExc
+  = FailExc ServerError
+  | FailFatalExc ServerError
+  | FastReturnExc !WorkerResponse
+  deriving (Generic)
+
+instance Show RouteResultExc where
+  showsPrec d (FailExc e) = showParen (d > 10) $ showString "FailExc " . showsPrec 11 e
+  showsPrec d (FailFatalExc e) =
+    showParen (d > 10) $ showString "FailFatalExc " . showsPrec 11 e
+  showsPrec d (FastReturnExc {}) = showParen (d > 10) $ showString "FastReturnExc <>"
+
+instance Exception RouteResultExc
+
 liftRouteResult :: RouteResult a -> DelayedIO e a
-liftRouteResult x = DelayedIO $ lift $ RouteResultT . return $ x
+{-# INLINE liftRouteResult #-}
+liftRouteResult x = DelayedIO $ lift $ case x of
+  Fail e -> throwIO $ FailExc e
+  FailFatal e -> throwIO $ FailFatalExc e
+  FastReturn r -> throwIO $ FastReturnExc r
+  Route a -> pure a
 
 runDelayedIO :: DelayedIO e a -> RoutingRequest -> JSObject e -> FetchContext -> IO (RouteResult a)
-runDelayedIO m request bindings fetchContext = runRouteResultT $ runReaderT (runDelayedIO' m) HandlerEnv {..}
+runDelayedIO m request bindings fetchContext = catchRouteT $ runReaderT (runDelayedIO' m) HandlerEnv {..}
+
+catchRouteT :: IO a -> IO (RouteResult a)
+{-# INLINE catchRouteT #-}
+catchRouteT =
+  fmap Route >>> handle \case
+    FailExc e -> pure $ Fail e
+    FailFatalExc e -> pure $ FailFatal e
+    FastReturnExc r -> pure $ FastReturn r
 
 -- | Fail with the option to recover.
 delayedFail :: ServerError -> DelayedIO e a

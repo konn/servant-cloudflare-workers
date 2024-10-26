@@ -7,19 +7,9 @@
 
 module Servant.Cloudflare.Workers.Internal.RouteResult (
   RouteResult (..),
-  RouteResultT (..),
 ) where
 
-import Control.Monad (
-  ap,
- )
-import Control.Monad.Catch (
-  MonadThrow (..),
- )
-import Control.Monad.IO.Unlift
-import Control.Monad.Trans (
-  MonadTrans (..),
- )
+import Control.Monad (ap)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.Cloudflare.Workers.Internal.ServerError
 
@@ -44,29 +34,3 @@ instance Monad RouteResult where
   Fail e >>= _ = Fail e
   FailFatal e >>= _ = FailFatal e
   FastReturn r >>= _ = FastReturn r
-
-newtype RouteResultT m a = RouteResultT {runRouteResultT :: m (RouteResult a)}
-  deriving (Functor)
-
-instance MonadTrans RouteResultT where
-  lift = RouteResultT . fmap Route
-
-instance (Functor m, Monad m) => Applicative (RouteResultT m) where
-  pure = RouteResultT . return . Route
-  (<*>) = ap
-
-instance (Monad m) => Monad (RouteResultT m) where
-  return = pure
-  m >>= k = RouteResultT $ do
-    a <- runRouteResultT m
-    case a of
-      FastReturn r -> return $ FastReturn r
-      Fail e -> return $ Fail e
-      FailFatal e -> return $ FailFatal e
-      Route b -> runRouteResultT (k b)
-
-instance (MonadIO m) => MonadIO (RouteResultT m) where
-  liftIO = lift . liftIO
-
-instance (MonadThrow m) => MonadThrow (RouteResultT m) where
-  throwM = lift . throwM
