@@ -143,7 +143,6 @@ library
     safe-exceptions,
     streaming-bytestring,
     tagged >=0.8.6 && <0.9,
-    unliftio-core,
     wasm-linear-base,
     web-sys-hs,
 

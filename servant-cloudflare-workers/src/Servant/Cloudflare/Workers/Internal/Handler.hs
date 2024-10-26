@@ -40,7 +40,7 @@ import Control.Monad.Error.Class (
   MonadError (..),
   throwError,
  )
-import Control.Monad.IO.Unlift
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader (..))
 import Control.Monad.Reader.Class (asks)
 import Control.Monad.Trans.Reader (ReaderT (..))
@@ -82,7 +82,6 @@ newtype Handler e a = Handler {runHandler' :: ReaderT (HandlerRep e) IO a}
     , Applicative
     , Monad
     , MonadIO
-    , MonadUnliftIO
     , MonadThrow
     , MonadCatch
     , MonadMask

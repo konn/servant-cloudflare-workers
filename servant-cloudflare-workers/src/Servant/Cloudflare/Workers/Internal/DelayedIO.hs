@@ -18,7 +18,6 @@ import Control.Monad.Catch (
   Exception,
   MonadThrow (..),
  )
-import Control.Monad.IO.Unlift ()
 import Control.Monad.Reader (
   MonadReader (..),
   ReaderT (..),
