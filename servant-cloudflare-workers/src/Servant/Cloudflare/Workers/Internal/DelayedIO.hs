@@ -11,9 +11,6 @@ module Servant.Cloudflare.Workers.Internal.DelayedIO (
   liftRouteResult,
 ) where
 
-import Control.Monad.Base (
-  MonadBase (..),
- )
 import Control.Monad.Catch (
   MonadThrow (..),
  )
@@ -48,9 +45,6 @@ newtype DelayedIO e a = DelayedIO {runDelayedIO' :: ReaderT (HandlerEnv e) (Rout
     , MonadReader (HandlerEnv e)
     , MonadThrow
     )
-
-instance MonadBase IO (DelayedIO e) where
-  liftBase = liftIO
 
 liftRouteResult :: RouteResult a -> DelayedIO e a
 liftRouteResult x = DelayedIO $ lift $ RouteResultT . return $ x
