@@ -6,6 +6,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RequiredTypeArguments #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -funbox-strict-fields #-}
 
 module Servant.Cloudflare.Workers.Internal.Handler (
   Handler (),
