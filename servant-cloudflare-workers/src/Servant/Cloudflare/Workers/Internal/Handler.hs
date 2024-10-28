@@ -23,6 +23,7 @@ module Servant.Cloudflare.Workers.Internal.Handler (
   getSecret,
   getRawRequest,
   getWorkerEnv,
+  getFetrchContext,
   getRemainingPathPieces,
 ) where
 
@@ -152,6 +153,11 @@ addFinaliser f = Handler do
 
 getWorkerEnv :: Handler e (JSObject e)
 getWorkerEnv = asks bindings
+
+getFetrchContext ::
+  forall es ss bs.
+  Handler (BindingsClass es ss bs) FetchContext
+getFetrchContext = asks $ (.fetchContext)
 
 getEnv ::
   forall l ->
