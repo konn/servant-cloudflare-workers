@@ -23,7 +23,9 @@ module Servant.Cloudflare.Workers.Internal.Handler (
   getSecret,
   getRawRequest,
   getWorkerEnv,
-  getFetrchContext,
+  getFetchContext,
+  waitUntil,
+  waitUntil',
   getRemainingPathPieces,
 ) where
 
@@ -57,6 +59,7 @@ import GHC.Wasm.Object.Builtins
 import Network.Cloudflare.Worker.Binding (BindingsClass, ListMember)
 import qualified Network.Cloudflare.Worker.Binding as Bindings
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
+import qualified Network.Cloudflare.Worker.Handler.Fetch as FC
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import Network.Cloudflare.Worker.Response (WorkerResponse)
 import Servant.Cloudflare.Workers.Internal.Response
@@ -154,10 +157,18 @@ addFinaliser f = Handler do
 getWorkerEnv :: Handler e (JSObject e)
 getWorkerEnv = asks bindings
 
-getFetrchContext ::
-  forall es ss bs.
-  Handler (BindingsClass es ss bs) FetchContext
-getFetrchContext = asks $ (.fetchContext)
+getFetchContext :: Handler e FetchContext
+getFetchContext = asks (.fetchContext)
+
+waitUntil :: Promise a -> Handler e ()
+waitUntil p = do
+  ctx <- getFetchContext
+  liftIO $ FC.waitUntil ctx p
+
+waitUntil' :: Promised a b -> Handler e ()
+waitUntil' p = do
+  ctx <- getFetchContext
+  liftIO $ FC.waitUntil ctx $ jsPromise p
 
 getEnv ::
   forall l ->

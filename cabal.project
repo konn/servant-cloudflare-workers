@@ -1,6 +1,6 @@
 import: cabal-common.project
-semaphore: True
 multi-repl: True
+semaphore: True
 
 packages:
   servant-cloudflare-workers/
