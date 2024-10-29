@@ -91,7 +91,6 @@ module Effectful.Servant.Cloudflare.Workers.D1 (
 
 import Data.Text qualified as T
 import Data.Vector qualified as V
-import Effectful.Concurrent.Async (Async)
 import Effectful.Dispatch.Static
 import Effectful.Servant.Cloudflare.Workers
 import GHC.Wasm.Object.Builtins
@@ -120,13 +119,13 @@ bind = fmap unsafeEff_ . Raw.bind
 bindRaw :: (HasUniqueWorker es) => PreparedStatement -> V.Vector D1Value -> Eff es Statement
 bindRaw = fmap unsafeEff_ . Raw.bind'
 
-all :: (HasUniqueWorker es) => Statement -> Eff es (Async (D1ResultView D1RowView))
+all :: (HasUniqueWorker es) => Statement -> Eff es (Promised (D1ResultClass D1RowClass) (D1ResultView D1RowView))
 all = unsafeEff_ . Raw.all
 
 allRaw :: (HasUniqueWorker es) => Statement -> Eff es (Promise (D1ResultClass D1RowClass))
 allRaw = unsafeEff_ . Raw.all'
 
-raw :: (HasUniqueWorker es) => Statement -> Eff es (Async (V.Vector (V.Vector D1ValueView)))
+raw :: (HasUniqueWorker es) => Statement -> Eff es (Promised (SequenceClass (SequenceClass D1ValueClass)) (V.Vector (V.Vector D1ValueView)))
 raw = unsafeEff_ . Raw.raw
 
 rawRaw :: (HasUniqueWorker es) => Statement -> Eff es (Promise (SequenceClass (SequenceClass D1ValueClass)))
@@ -135,7 +134,7 @@ rawRaw = unsafeEff_ . Raw.raw'
 rawWithColumns ::
   (HasUniqueWorker es) =>
   Statement ->
-  Eff es (Async (V.Vector T.Text, V.Vector (V.Vector D1ValueView)))
+  Eff es (Promised (SequenceClass (SequenceClass D1ValueClass)) (V.Vector T.Text, V.Vector (V.Vector D1ValueView)))
 rawWithColumns = unsafeEff_ . Raw.rawWithColumns
 
 rawWithColumnsRaw ::
@@ -144,7 +143,7 @@ rawWithColumnsRaw ::
   Eff es (Promise (SequenceClass (SequenceClass D1ValueClass)))
 rawWithColumnsRaw = unsafeEff_ . Raw.rawWithColumns'
 
-first :: (HasUniqueWorker es) => Statement -> Eff es (Async (Maybe D1RowView))
+first :: (HasUniqueWorker es) => Statement -> Eff es (Promised (NullableClass D1RowClass) (Maybe D1RowView))
 first = unsafeEff_ . Raw.first
 
 firstRaw :: (HasUniqueWorker es) => Statement -> Eff es (Promise (NullableClass D1RowClass))
@@ -154,7 +153,7 @@ firstColumns ::
   (HasUniqueWorker es) =>
   Statement ->
   V.Vector T.Text ->
-  Eff es (Async (Maybe (V.Vector D1ValueView)))
+  Eff es (Promised (NullableClass (SequenceClass D1ValueClass)) (Maybe (V.Vector D1ValueView)))
 firstColumns = fmap unsafeEff_ . Raw.firstColumns
 
 firstColumnsRaw ::
@@ -164,7 +163,7 @@ firstColumnsRaw ::
   Eff es (Promise (NullableClass (SequenceClass D1ValueClass)))
 firstColumnsRaw = fmap unsafeEff_ . Raw.firstColumns'
 
-run :: (HasUniqueWorker es) => Statement -> Eff es (Async D1MetricsView)
+run :: (HasUniqueWorker es) => Statement -> Eff es (Promised D1MetricsClass D1MetricsView)
 run = unsafeEff_ . Raw.run
 
 runRaw :: (HasUniqueWorker es) => Statement -> Eff es (Promise D1MetricsClass)
@@ -174,7 +173,12 @@ batch' ::
   (HasUniqueWorker es) =>
   D1 ->
   V.Vector Statement ->
-  Eff es (Async (V.Vector (D1ResultView D1RowView)))
+  Eff
+    es
+    ( Promised
+        (SequenceClass (D1ResultClass D1RowClass))
+        (V.Vector (D1ResultView D1RowView))
+    )
 batch' d1 = unsafeEff_ . Raw.batch d1
 
 batch ::
@@ -185,10 +189,15 @@ batch ::
   , Lookup' l bs ~ D1Class
   ) =>
   V.Vector Statement ->
-  Eff es (Async (V.Vector (D1ResultView D1RowView)))
+  Eff
+    es
+    ( Promised
+        (SequenceClass (D1ResultClass D1RowClass))
+        (V.Vector (D1ResultView D1RowView))
+    )
 batch l = withBinding l . flip batch'
 
-exec' :: (HasUniqueWorker es) => D1 -> T.Text -> Eff es (Async D1ExecResultView)
+exec' :: (HasUniqueWorker es) => D1 -> T.Text -> Eff es (Promised D1ExecResultClass D1ExecResultView)
 exec' d1 = unsafeEff_ . Raw.exec d1
 
 exec ::
@@ -199,7 +208,7 @@ exec ::
   , Lookup' l bs ~ D1Class
   ) =>
   T.Text ->
-  Eff es (Async D1ExecResultView)
+  Eff es (Promised D1ExecResultClass D1ExecResultView)
 exec l = withBinding l . flip exec'
 
 execRaw' :: (HasUniqueWorker es) => D1 -> USVString -> Eff es (Promise D1ExecResultClass)
