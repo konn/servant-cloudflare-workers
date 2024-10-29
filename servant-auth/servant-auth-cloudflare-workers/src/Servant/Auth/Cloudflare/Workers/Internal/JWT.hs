@@ -430,7 +430,7 @@ toCryptoKey alg jwk =
       (upcast jwk)
       (toAlogirhtmIdentifier alg)
       False
-      (toSequence $ pure "verify")
+      =<< toSequence (pure "verify")
 
 detectAlgorithm :: CryptoKey -> Maybe JWSAlg
 detectAlgorithm key = do
