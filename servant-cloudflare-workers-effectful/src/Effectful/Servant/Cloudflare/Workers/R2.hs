@@ -89,7 +89,6 @@ module Effectful.Servant.Cloudflare.Workers.R2 (
 
 import Data.ByteString qualified as BS
 import Data.Vector qualified as V
-import Effectful.Concurrent.Async (Async)
 import Effectful.Dispatch.Static (unsafeEff_)
 import Effectful.Servant.Cloudflare.Workers
 import GHC.Wasm.Object.Builtins
@@ -123,7 +122,7 @@ head' ::
   (HasUniqueWorker es) =>
   R2 ->
   BS.ByteString ->
-  Eff es (Async (Maybe R2Object))
+  Eff es (Promised (NullableClass R2ObjectClass) (Maybe R2Object))
 head' r2 = unsafeEff_ . Raw.head r2
 
 head ::
@@ -134,7 +133,7 @@ head ::
   , Lookup' l bs ~ R2Class
   ) =>
   BS.ByteString ->
-  Eff es (Async (Maybe R2Object))
+  Eff es (Promised (NullableClass R2ObjectClass) (Maybe R2Object))
 head l = withBinding l . flip head'
 
 get' ::
@@ -142,7 +141,7 @@ get' ::
   (HasUniqueWorker es) =>
   R2 ->
   BS.ByteString ->
-  Eff es (Async (Maybe R2ObjectBody))
+  Eff es (Promised (NullableClass R2ObjectBodyClass) (Maybe R2ObjectBody))
 get' r2 = unsafeEff_ . Raw.get r2
 
 get ::
@@ -153,7 +152,7 @@ get ::
   , Lookup' l bs ~ R2Class
   ) =>
   BS.ByteString ->
-  Eff es (Async (Maybe R2ObjectBody))
+  Eff es (Promised (NullableClass R2ObjectBodyClass) (Maybe R2ObjectBody))
 get l = withBinding l . flip get'
 
 getWith' ::
@@ -162,7 +161,7 @@ getWith' ::
   R2 ->
   BS.ByteString ->
   RawGetOptions ->
-  Eff es (Async (Maybe (Either R2Object R2ObjectBody)))
+  Eff es (Promised (NullableClass (UnionClass '[R2ObjectClass, R2ObjectBodyClass])) (Maybe (Either R2Object R2ObjectBody)))
 getWith' r2 bs = unsafeEff_ . Raw.getWith r2 bs
 
 getWith ::
@@ -174,7 +173,7 @@ getWith ::
   ) =>
   BS.ByteString ->
   RawGetOptions ->
-  Eff es (Async (Maybe (Either R2Object R2ObjectBody)))
+  Eff es (Promised (NullableClass (UnionClass '[R2ObjectClass, R2ObjectBodyClass])) (Maybe (Either R2Object R2ObjectBody)))
 getWith l bs req = withBinding l \kv -> getWith' kv bs req
 
 put' ::
@@ -183,7 +182,7 @@ put' ::
   R2 ->
   BS.ByteString ->
   PutBody ->
-  Eff es (Async (Maybe R2Object))
+  Eff es (Promised (NullableClass R2ObjectClass) (Maybe R2Object))
 put' r2 = fmap unsafeEff_ . Raw.put r2
 
 put ::
@@ -195,7 +194,7 @@ put ::
   ) =>
   BS.ByteString ->
   PutBody ->
-  Eff es (Async (Maybe R2Object))
+  Eff es (Promised (NullableClass R2ObjectClass) (Maybe R2Object))
 put l bs bdy = withBinding l \r2 -> put' r2 bs bdy
 
 putWith' ::
@@ -205,7 +204,7 @@ putWith' ::
   BS.ByteString ->
   PutBody ->
   RawPutOptions ->
-  Eff es (Async (Maybe R2Object))
+  Eff es (Promised (NullableClass R2ObjectClass) (Maybe R2Object))
 putWith' r2 = fmap (fmap unsafeEff_) . Raw.putWith r2
 
 putWith ::
@@ -218,7 +217,7 @@ putWith ::
   BS.ByteString ->
   PutBody ->
   RawPutOptions ->
-  Eff es (Async (Maybe R2Object))
+  Eff es (Promised (NullableClass R2ObjectClass) (Maybe R2Object))
 putWith l bs bdy opt = withBinding l \r2 -> putWith' r2 bs bdy opt
 
 delete' ::
@@ -226,7 +225,7 @@ delete' ::
   (HasUniqueWorker es) =>
   R2 ->
   BS.ByteString ->
-  Eff es (Async ())
+  Eff es (Promised UndefinedClass ())
 delete' r2 = unsafeEff_ . Raw.delete r2
 
 delete ::
@@ -237,7 +236,7 @@ delete ::
   , Lookup' l bs ~ R2Class
   ) =>
   BS.ByteString ->
-  Eff es (Async ())
+  Eff es (Promised UndefinedClass ())
 delete l = withBinding l . flip delete'
 
 deleteMany' ::
@@ -245,7 +244,7 @@ deleteMany' ::
   (HasUniqueWorker es) =>
   R2 ->
   V.Vector BS.ByteString ->
-  Eff es (Async ())
+  Eff es (Promised UndefinedClass ())
 deleteMany' r2 = unsafeEff_ . Raw.deleteMany r2
 
 deleteMany ::
@@ -256,14 +255,14 @@ deleteMany ::
   , Lookup' l bs ~ R2Class
   ) =>
   V.Vector BS.ByteString ->
-  Eff es (Async ())
+  Eff es (Promised UndefinedClass ())
 deleteMany l = withBinding l . flip deleteMany'
 
 list' ::
   (HasUniqueWorker es) =>
   R2 ->
   Maybe RawListOptions ->
-  Eff es (Async R2ObjectsView)
+  Eff es (Promised R2ObjectsClass R2ObjectsView)
 list' r2 = unsafeEff_ . Raw.list r2
 
 list ::
@@ -273,7 +272,7 @@ list ::
   , Lookup' l bs ~ R2Class
   ) =>
   Maybe RawListOptions ->
-  Eff es (Async R2ObjectsView)
+  Eff es (Promised R2ObjectsClass R2ObjectsView)
 list l = withBinding l . flip list'
 
 listRaw' ::

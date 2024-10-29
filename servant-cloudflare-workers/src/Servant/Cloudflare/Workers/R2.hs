@@ -14,7 +14,6 @@ module Servant.Cloudflare.Workers.R2 (
   serveBucketRelFrom,
 ) where
 
-import Control.Concurrent.Async (wait)
 import Control.Monad (forM_)
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Char8 as BS8
@@ -40,7 +39,7 @@ import qualified Wasm.Data.Function.Linear as PL
 
 serveObjectWith :: R2 -> BS.ByteString -> WorkerT e Raw m
 serveObjectWith r2 obj = Tagged \_ _ _ -> do
-  mbody <- wait =<< R2.get r2 obj
+  mbody <- await' =<< R2.get r2 obj
   case mbody of
     Nothing ->
       toWorkerResponse $ responseServerError err500 {errBody = "Failed to fetch R2 object"}

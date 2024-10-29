@@ -130,7 +130,6 @@ library
   -- Here can be exceptions if we really need features from the newer versions.
   build-depends:
     aeson,
-    async,
     case-insensitive,
     cloudflare-worker,
     containers,
