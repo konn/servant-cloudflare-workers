@@ -157,7 +157,7 @@ generateKey =
       subtleCrypto
       rs256Params
       False
-      =<< toSequence (fromList ["sign", "verify"])
+      (toSequence $ fromList ["sign", "verify"])
 
 foreign import javascript unsafe "{name: \"RSASSA-PKCS1-v1_5\", hash: \"SHA-256\", publicExponent: Uint8Array.from([0x01, 0x00, 0x01]), modulusLength: 4096}"
   rs256Params :: AlgorithmIdentifier
