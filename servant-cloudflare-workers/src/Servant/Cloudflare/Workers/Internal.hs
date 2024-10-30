@@ -96,6 +96,7 @@ import Servant.API.ResponseHeaders (
 import Servant.API.Status (
   statusFromNat,
  )
+import Servant.API.Stream
 import Servant.API.TypeErrors
 import Servant.API.TypeLevel (AtMostOneFragment, FragmentUnique)
 import Servant.Cloudflare.Workers.Internal.Context
@@ -398,6 +399,26 @@ instance
   route Proxy _ _ = noContentRouter method status204
     where
       method = reflectMethod (Proxy :: Proxy method)
+
+instance
+  (a ~ ReadableStream, HasWorker e api context) =>
+  HasWorker e (StreamBody' mods framing ctype a :> api) context
+  where
+  type WorkerT e (StreamBody' mods framing ctype a :> api) m = a -> WorkerT e api m
+
+  hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
+
+  route pe Proxy context subserver =
+    route pe (Proxy :: Proxy api) context $
+      addBodyCheck subserver ctCheck bodyCheck
+    where
+      ctCheck :: DelayedIO e (WorkerRequest -> IO ReadableStream)
+      -- TODO: do content-type check
+      ctCheck = return $ nullable (toReadableStream mempty) pure . Req.getBody
+
+      bodyCheck :: (WorkerRequest -> IO ReadableStream) -> DelayedIO e ReadableStream
+      bodyCheck fromRS = withRequest $ \req _ _ -> do
+        liftIO $ fromRS req.rawRequest
 
 responseStream :: Status -> [(HeaderName, BC8.ByteString)] -> RS.ReadableStream -> RoutingResponse
 responseStream stt hdrs str =

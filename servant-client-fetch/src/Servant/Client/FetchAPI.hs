@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeData #-}
 {-# LANGUAGE UnliftedDatatypes #-}
 {-# LANGUAGE NoFieldSelectors #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Servant.Client.FetchAPI (
   FetchT (),
@@ -33,6 +34,7 @@ import Data.ByteString.Char8 qualified as BS
 import Data.ByteString.Lazy.Char8 qualified as LBS
 import Data.CaseInsensitive qualified as CI
 import Data.Foldable qualified as F
+import Data.Functor ((<&>))
 import Data.Map.Strict qualified as Map
 import Data.Monoid
 import Data.Sequence qualified as Seq
@@ -50,16 +52,17 @@ import GHC.Wasm.Web.Generated.Response
 import GHC.Wasm.Web.Generated.Response qualified as FetchResp
 import GHC.Wasm.Web.Generated.Response qualified as JS
 import GHC.Wasm.Web.Generated.URL
-import GHC.Wasm.Web.ReadableStream (fromReadableStream)
+import GHC.Wasm.Web.ReadableStream (ReadableStream, fromReadableStream)
 import Lens.Family.Total
 import Network.HTTP.Media (renderHeader)
 import Network.HTTP.Types.Status (Status (..))
 import Network.HTTP.Types.URI (renderQuery)
 import Network.HTTP.Types.Version (HttpVersion)
-import Servant.API (SourceIO)
+import Servant.API.Stream
 import Servant.Client.Core
 import Servant.Client.Core qualified as Servant
 import Servant.Client.Core.Reexport
+import Servant.Types.SourceT (SourceT (..))
 import Servant.Types.SourceT qualified as Servant
 import Streaming.ByteString qualified as Q
 import Streaming.ByteString.Internal qualified as QI
@@ -149,6 +152,17 @@ type Fetcher =
 
 data FetchResult = Ok JS.Response | StatusError JS.Response | UnknownError T.Text
   deriving (Generic)
+
+instance ToSourceIO BS.ByteString ReadableStream where
+  toSourceIO rbs = do
+    SourceT \withStep ->
+      withStep $ go $ fromReadableStream rbs
+    where
+      go :: Q.ByteStream IO () -> Servant.StepT IO BS.ByteString
+      go = \case
+        QI.Chunk bs a -> Servant.Yield bs $ go a
+        QI.Empty {} -> Servant.Stop
+        QI.Go act -> Servant.Effect $ act <&> go
 
 fetchWith ::
   Fetcher ->
