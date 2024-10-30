@@ -59,6 +59,7 @@ library
     safe-exceptions,
     servant,
     servant-client-core,
+    servant-cloudflare-workers-core,
     streaming,
     streaming-bytestring,
     text,

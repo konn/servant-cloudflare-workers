@@ -16,6 +16,7 @@ build-all:
   COPY --keep-ts ./*.project ./
   COPY --keep-ts ./*.freeze ./
   COPY --keep-ts ./servant-cloudflare-workers ./servant-cloudflare-workers
+  COPY --keep-ts ./servant-cloudflare-workers-core ./servant-cloudflare-workers-core
   COPY --keep-ts ./servant-cloudflare-workers-effectful ./servant-cloudflare-workers-effectful
   COPY --keep-ts ./servant-client-fetch ./servant-client-fetch
   COPY --keep-ts ./servant-auth/servant-auth-lite ./servant-auth/servant-auth-lite

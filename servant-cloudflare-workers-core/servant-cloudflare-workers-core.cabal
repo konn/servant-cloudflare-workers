@@ -1,0 +1,43 @@
+cabal-version: 3.4
+name: servant-cloudflare-workers-core
+version: 0.1.0.0
+description: Please see the README on GitHub at <https://github.com/konn/servant-cloudflare-workers-core#readme>
+homepage: https://github.com/konn/servant-cloudflare-workers-core#readme
+bug-reports: https://github.com/konn/servant-cloudflare-workers-core/issues
+author: Hiromi ISHII
+maintainer: konn.jinro_at_gmail.com
+copyright: 2024 (c) Hiromi ISHII
+license: BSD-3-Clause
+license-file: LICENSE
+build-type: Simple
+extra-source-files:
+  CHANGELOG.md
+  README.md
+
+source-repository head
+  type: git
+  location: https://github.com/konn/servant-cloudflare-workers-core
+
+library
+  other-modules: Paths_servant_cloudflare_workers_core
+  autogen-modules: Paths_servant_cloudflare_workers_core
+  -- cabal-gild: discover src
+  exposed-modules: Servant.API.Cloudflare
+  hs-source-dirs: src
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-export-lists
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
+    -Wunused-packages
+
+  build-depends:
+    base >=4.7 && <5,
+    servant,
+
+  default-language: GHC2021

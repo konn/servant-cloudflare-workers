@@ -9,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeData #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UnliftedDatatypes #-}
 {-# LANGUAGE NoFieldSelectors #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -37,6 +38,7 @@ import Data.Foldable qualified as F
 import Data.Functor ((<&>))
 import Data.Map.Strict qualified as Map
 import Data.Monoid
+import Data.Proxy
 import Data.Sequence qualified as Seq
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -54,11 +56,12 @@ import GHC.Wasm.Web.Generated.Response qualified as JS
 import GHC.Wasm.Web.Generated.URL
 import GHC.Wasm.Web.ReadableStream (ReadableStream, fromReadableStream)
 import Lens.Family.Total
-import Network.HTTP.Media (renderHeader)
+import Network.HTTP.Media (MediaType, renderHeader)
 import Network.HTTP.Types.Status (Status (..))
 import Network.HTTP.Types.URI (renderQuery)
-import Network.HTTP.Types.Version (HttpVersion)
-import Servant.API.Stream
+import Servant.API hiding (inject)
+import Servant.API.Cloudflare
+import Servant.API.ContentTypes (AllMime (..))
 import Servant.Client.Core
 import Servant.Client.Core qualified as Servant
 import Servant.Client.Core.Reexport
@@ -152,6 +155,37 @@ type Fetcher =
 
 data FetchResult = Ok JS.Response | StatusError JS.Response | UnknownError T.Text
   deriving (Generic)
+
+instance
+  ( RunClient m
+  , AllMime ctypes
+  , HasClient m api
+  , ToSourceIO LBS.ByteString a
+  ) =>
+  HasClient m (ReadableStreamBody ctypes a :> api)
+  where
+  type Client m (ReadableStreamBody ctypes a :> api) = (MediaType, a) -> Client m api
+
+  hoistClientMonad pm _ f cl = \a ->
+    hoistClientMonad pm (Proxy :: Proxy api) f (cl a)
+
+  clientWithRoute pm Proxy req (ct, body) =
+    hoistClientMonad @m @_ @m @m
+      pm
+      (Proxy :: Proxy api)
+      ( \act -> do
+          unless (ct `elem` mimes) $ do
+            throwClientError $ ConnectionError $ SomeException $ userError "Content-Type is not supported by the server"
+          act
+      )
+      $ clientWithRoute pm (Proxy :: Proxy api)
+      $ setRequestBody
+        (RequestBodySource sourceIO)
+        ct
+        req
+    where
+      mimes = allMime $ Proxy @ctypes
+      sourceIO = toSourceIO body
 
 instance ToSourceIO BS.ByteString ReadableStream where
   toSourceIO rbs = do

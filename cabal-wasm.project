@@ -1,6 +1,7 @@
 import: cabal-common.project
 with-compiler: wasm32-wasi-9.10.1
 packages:
+  servant-cloudflare-workers-core/
   servant-cloudflare-workers/
   servant-cloudflare-workers-effectful/
   servant-client-fetch/

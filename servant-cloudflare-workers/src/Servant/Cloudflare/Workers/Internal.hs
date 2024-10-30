@@ -71,6 +71,7 @@ import Servant.API (
   (:<|>) (..),
   (:>),
  )
+import Servant.API.Cloudflare
 import Servant.API.ContentTypes (
   AcceptHeader (..),
   AllCTRender (..),
@@ -415,6 +416,30 @@ instance
       ctCheck :: DelayedIO e (WorkerRequest -> IO ReadableStream)
       -- TODO: do content-type check
       ctCheck = return $ nullable (toReadableStream mempty) pure . Req.getBody
+
+      bodyCheck :: (WorkerRequest -> IO ReadableStream) -> DelayedIO e ReadableStream
+      bodyCheck fromRS = withRequest $ \req _ _ -> do
+        liftIO $ fromRS req.rawRequest
+
+instance
+  (HasWorker e api ctx, AllMime ctypes) =>
+  HasWorker e (ReadableStreamBody ctypes a :> api) ctx
+  where
+  type
+    WorkerT e (ReadableStreamBody ctypes a :> api) m =
+      ReadableStream -> WorkerT e api m
+
+  hoistWorkerWithContext pe _ pc nt s = hoistWorkerWithContext pe (Proxy :: Proxy api) pc nt . s
+
+  route pe Proxy context subserver =
+    route pe (Proxy :: Proxy api) context $
+      addBodyCheck subserver ctCheck bodyCheck
+        `addAcceptCheck` accept
+    where
+      ctCheck :: DelayedIO e (WorkerRequest -> IO ReadableStream)
+      ctCheck = return $ nullable (toReadableStream mempty) pure . Req.getBody
+      accept = withRequest $ \req _ _ ->
+        acceptCheck (Proxy @ctypes) (getAcceptHeader req.rawRequest)
 
       bodyCheck :: (WorkerRequest -> IO ReadableStream) -> DelayedIO e ReadableStream
       bodyCheck fromRS = withRequest $ \req _ _ -> do
