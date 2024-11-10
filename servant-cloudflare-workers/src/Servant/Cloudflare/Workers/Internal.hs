@@ -38,7 +38,6 @@ import Data.Word (Word16)
 import GHC.Generics
 import GHC.TypeLits (KnownNat, KnownSymbol, TypeError, symbolVal)
 import GHC.Wasm.Object.Builtins
-import GHC.Wasm.Web.Generated.Headers (js_cons_Headers)
 import qualified GHC.Wasm.Web.Generated.Headers as H
 import GHC.Wasm.Web.ReadableStream (ReadableStream, toReadableStream)
 import qualified GHC.Wasm.Web.ReadableStream as RS
@@ -396,7 +395,7 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
     pure
       ( hdr
       , \_ hdrs -> do
-          rspHeaders <- js_cons_Headers . nonNull . inject =<< Resp.getHeaders resp
+          rspHeaders {- js_cons_Headers . nonNull . inject =<<  -} <- Resp.getHeaders resp
           forM_ hdrs $ \(k, v) -> do
             k' <- fromHaskellByteString $ CI.original k
             v' <- fromHaskellByteString v
