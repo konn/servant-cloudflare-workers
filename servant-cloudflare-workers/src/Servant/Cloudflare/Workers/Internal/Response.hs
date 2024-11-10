@@ -13,8 +13,6 @@ import Control.Monad (guard)
 import Data.Aeson (Value)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import qualified Data.CaseInsensitive as CI
-import qualified Data.Map.Strict as Map
 import Data.Word
 import GHC.Generics (Generic)
 import GHC.Wasm.Object.Builtins
@@ -45,7 +43,7 @@ toWorkerResponse (RouteResponse r) = fromPartialResponse r
 fromPartialResponse :: PartialResponse -> IO WorkerResponse
 fromPartialResponse PartialResponse {..} = do
   mbody <- mapM fromWorkerResponseBody body
-  hdrs <- Resp.toHeaders $ Map.mapKeys CI.original $ Map.fromList headers
+  hdrs <- Resp.toHeaders headers
   encode <- maybe (fromHaskellByteString "automatic") fromHaskellByteString encodeBody
   cf <- maybe emptyObject encodeJSON cloudflare
   statusMsg <- fromHaskellByteString status.statusMessage

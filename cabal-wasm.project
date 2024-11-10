@@ -8,7 +8,7 @@ packages:
   servant-auth/servant-auth-lite
   servant-auth/servant-auth-cloudflare-workers
   servant-auth/servant-auth-lite-client
-optimization: False
+optimization: 2
 active-repositories: hackage.haskell.org
 semaphore: True
 jobs: $ncpus

@@ -18,8 +18,9 @@ module Servant.Cloudflare.Workers.Cache (
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader (..))
+import qualified Data.Bifunctor as Bi
 import qualified Data.ByteString.Char8 as BS8
-import qualified Data.Map.Strict as Map
+import qualified Data.CaseInsensitive as CI
 import Data.Maybe (fromJust)
 import Data.Tagged (Tagged (..))
 import qualified Data.Text as T
@@ -108,7 +109,7 @@ retrieveCache opts req = do
               { uriFragment = ""
               , uriQuery = if opts.includeQuery then uri.uriQuery else ""
               }
-  reqHdrs0 <- Resp.toHeaders $ Map.fromList (Req.getHeaders req)
+  reqHdrs0 <- Resp.toHeaders $ map (Bi.first CI.mk) $ Req.getHeaders req
   keyReq <-
     Req.newRequest (Just cachePath) $
       Just $
