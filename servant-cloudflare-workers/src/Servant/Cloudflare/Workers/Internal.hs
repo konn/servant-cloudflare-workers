@@ -34,6 +34,7 @@ import Data.Tagged (Tagged (..), retag, untag)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Typeable
+import Data.Word (Word16)
 import GHC.Generics
 import GHC.TypeLits (KnownNat, KnownSymbol, TypeError, symbolVal)
 import GHC.Wasm.Object.Builtins
@@ -386,33 +387,29 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Readab
     hdr <- M.mapAcceptMedia amrs accept
     pure (hdr, \stt hdrs -> pure $ responseStream stt hdrs body)
 
+-- | N.B. Ignores the status.
 instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes WorkerResponse where
   handleWorkerAcceptH ctypes (AcceptHeader accept) resp = do
     let amrs = map ((,) <$> id <*> BSL.fromStrict . M.renderHeader) $ allMime ctypes
     hdr <- M.mapAcceptMedia amrs accept
     pure
       ( hdr
-      , \stt hdrs -> do
-          consoleLog "handleWorkerAcceptH"
+      , \_ hdrs -> do
           rspHeaders <- Resp.getHeaders resp
-          consoleLog "Headers get."
           forM_ hdrs $ \(k, v) -> do
-            consoleLog $ fromString $ "Setting: " <> show (k, v)
             k' <- fromHaskellByteString $ CI.original k
             v' <- fromHaskellByteString v
             H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
-            consoleLog $ fromString $ "Set: " <> show k
-          consoleLog $ "Seting status text..."
-          sttMsg <- fromHaskellByteString stt.statusMessage
+          sttCode <- js_get_status resp
+          sttMsg <- js_get_statusText resp
           body <- fmap inject . fromNullable <$> Resp.getBody resp
           encodeBody <- js_get_encodeBody resp
           cf <- js_get_cf resp
-          consoleLog $ "All done!"
           fmap RawResponse $
             Resp.newResponse' body $
               Just $
                 newDictionary
-                  PL.$ setPartialField "status" (toJSPrim $ fromIntegral stt.statusCode)
+                  PL.$ setPartialField "status" sttCode
                   PL.. setPartialField "statusText" sttMsg
                   PL.. setPartialField "headers" (inject rspHeaders)
                   PL.. setPartialField "encodeBody" encodeBody
@@ -1279,5 +1276,8 @@ foreign import javascript unsafe "$1.cf"
 foreign import javascript unsafe "$1.encodeBody"
   js_get_encodeBody :: WorkerResponse -> IO JSByteString
 
-foreign import javascript unsafe "console.log($1)"
-  consoleLog :: USVString -> IO ()
+foreign import javascript unsafe "$1.status"
+  js_get_status :: WorkerResponse -> IO (JSPrim Word16)
+
+foreign import javascript unsafe "$1.statusText"
+  js_get_statusText :: WorkerResponse -> IO JSByteString
