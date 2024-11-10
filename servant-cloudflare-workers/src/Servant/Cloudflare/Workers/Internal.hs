@@ -38,6 +38,7 @@ import Data.Word (Word16)
 import GHC.Generics
 import GHC.TypeLits (KnownNat, KnownSymbol, TypeError, symbolVal)
 import GHC.Wasm.Object.Builtins
+import GHC.Wasm.Web.Generated.Headers (js_cons_Headers)
 import qualified GHC.Wasm.Web.Generated.Headers as H
 import GHC.Wasm.Web.ReadableStream (ReadableStream, toReadableStream)
 import qualified GHC.Wasm.Web.ReadableStream as RS
@@ -395,7 +396,7 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
     pure
       ( hdr
       , \_ hdrs -> do
-          rspHeaders {- js_cons_Headers . nonNull . inject =<<  -} <- Resp.getHeaders resp
+          rspHeaders <- js_cons_Headers . nonNull . inject =<< Resp.getHeaders resp
           forM_ hdrs $ \(k, v) -> do
             k' <- fromHaskellByteString $ CI.original k
             v' <- fromHaskellByteString v
@@ -403,9 +404,8 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
             H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
             consoleLog $ fromString $ "Header Set: " <> show (k, v)
           consoleLog "All headers set!"
-          hdrstr <- js_stringify rspHeaders
           consoleLog $ "final headers: (next line)"
-          consoleLog hdrstr
+          js_skim_header rspHeaders
           sttCode <- js_get_status resp
           sttMsg <- js_get_statusText resp
           body <- fmap inject . fromNullable <$> Resp.getBody resp
@@ -1292,5 +1292,5 @@ foreign import javascript unsafe "$1.statusText"
 foreign import javascript unsafe "console.log($1)"
   consoleLog :: USVString -> IO ()
 
-foreign import javascript unsafe "JSON.stringify($1)"
-  js_stringify :: JSObject a -> IO USVString
+foreign import javascript unsafe "console.log($1)"
+  js_skim_header :: JSObject a -> IO ()
