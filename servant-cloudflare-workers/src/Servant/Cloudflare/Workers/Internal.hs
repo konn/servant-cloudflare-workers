@@ -402,18 +402,12 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
             v' <- fromHaskellByteString v
             present <- js_fun_has_ByteString_boolean rspHeaders k'
             unless ("Contenty-Type" /= k && present) do
-              consoleLog $ fromString $ "Setting: " <> show (k, v)
               H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
-              consoleLog $ fromString $ "Header Set: " <> show (k, v)
-          consoleLog "All headers set!"
-          consoleLog $ "final headers: (next line)"
-          js_skim_header rspHeaders
           sttCode <- js_get_status resp
           sttMsg <- js_get_statusText resp
           body <- fmap inject . fromNullable <$> Resp.getBody resp
           encodeBody <- js_get_encodeBody resp
           cf <- js_get_cf resp
-          consoleLog "Creating Response..."
           fmap RawResponse $
             Resp.newResponse' body $
               Just $
@@ -1290,9 +1284,3 @@ foreign import javascript unsafe "$1.status"
 
 foreign import javascript unsafe "$1.statusText"
   js_get_statusText :: WorkerResponse -> IO JSByteString
-
-foreign import javascript unsafe "console.log($1)"
-  consoleLog :: USVString -> IO ()
-
-foreign import javascript unsafe "console.log($1)"
-  js_skim_header :: JSObject a -> IO ()
