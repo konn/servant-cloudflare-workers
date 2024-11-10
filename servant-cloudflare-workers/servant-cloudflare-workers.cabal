@@ -137,6 +137,7 @@ library
     exceptions >=0.10.0 && <0.11,
     ghc-wasm-compat,
     ghc-wasm-jsobjects,
+    http-media,
     http-types >=0.12.2 && <0.13,
     mime-types,
     network-uri,

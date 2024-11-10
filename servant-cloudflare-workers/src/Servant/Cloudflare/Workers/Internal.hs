@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 
 module Servant.Cloudflare.Workers.Internal (
   module Servant.Cloudflare.Workers.Internal,
@@ -24,6 +25,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.CaseInsensitive as CI
 import Data.Constraint (Constraint, Dict (..))
 import Data.Either (partitionEithers)
+import Data.Foldable (forM_)
 import Data.Kind (Type)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Monoid (Ap (..))
@@ -35,12 +37,15 @@ import Data.Typeable
 import GHC.Generics
 import GHC.TypeLits (KnownNat, KnownSymbol, TypeError, symbolVal)
 import GHC.Wasm.Object.Builtins
+import qualified GHC.Wasm.Web.Generated.Headers as H
 import GHC.Wasm.Web.ReadableStream (ReadableStream, toReadableStream)
 import qualified GHC.Wasm.Web.ReadableStream as RS
 import Network.Cloudflare.Worker.Handler.Fetch (FetchContext)
 import Network.Cloudflare.Worker.Request (WorkerRequest)
 import qualified Network.Cloudflare.Worker.Request as Req
 import Network.Cloudflare.Worker.Response (WorkerResponse, WorkerResponseBody (..))
+import qualified Network.Cloudflare.Worker.Response as Resp
+import qualified Network.HTTP.Media as M
 import Network.HTTP.Types hiding (Header, ResponseHeaders)
 import qualified Network.HTTP.Types as H
 import Servant.API (
@@ -78,6 +83,7 @@ import Servant.API.ContentTypes (
   AllCTUnrender (..),
   AllMime,
   NoContent,
+  allMime,
   canHandleAcceptH,
  )
 import Servant.API.Generic (GServantProduct, GenericMode (..), ToServant, ToServantApi, fromServant, toServant)
@@ -309,7 +315,7 @@ acceptCheck proxy accH
 
 methodRouter ::
   forall ctypes a e b env.
-  (AllCTRender ctypes a) =>
+  (AllWorkerCTRender ctypes a) =>
   (b -> ([(HeaderName, B.ByteString)], a)) ->
   Method ->
   Proxy ctypes ->
@@ -333,11 +339,14 @@ methodRouter splitHeaders method proxy status action = leafRouter route'
             respond
             $ \output -> do
               let (headers, b) = splitHeaders output
-              case handleAcceptH proxy accH b of
-                Nothing -> FailFatal err406 -- this should not happen (checked before), so we make it fatal if it does
+              case handleWorkerAcceptH proxy accH b of
+                Nothing -> pure $ FailFatal err406 -- this should not happen (checked before), so we make it fatal if it does
                 Just (contentT, body) ->
-                  let bdy = if allowedMethodHead method request then "" else body
-                   in Route $ responseLBS status ((hContentType, BSL.toStrict contentT) : headers) bdy
+                  let bdy =
+                        if allowedMethodHead method request
+                          then \stt hdrs -> pure $ responseBS stt hdrs mempty
+                          else body
+                   in Route <$> bdy status ((hContentType, BSL.toStrict contentT) : headers)
 
 noContentRouter ::
   Method ->
@@ -355,11 +364,57 @@ noContentRouter method status action = leafRouter route'
         ctx
         respond
         $ \_output ->
-          Route $ responseLBS status [] ""
+          pure $ Route $ responseLBS status [] ""
+
+type AllWorkerCTRender :: [Type] -> Type -> Constraint
+class (AllMime ctypes) => AllWorkerCTRender ctypes a where
+  handleWorkerAcceptH ::
+    Proxy ctypes ->
+    AcceptHeader ->
+    a ->
+    Maybe
+      ( BSL.ByteString
+      , Status ->
+        [(HeaderName, B.ByteString)] ->
+        IO RoutingResponse
+      )
+
+instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes ReadableStream where
+  handleWorkerAcceptH ctypes (AcceptHeader accept) body = do
+    let amrs = map ((,) <$> id <*> BSL.fromStrict . M.renderHeader) $ allMime ctypes
+    hdr <- M.mapAcceptMedia amrs accept
+    pure (hdr, \stt hdrs -> pure $ responseStream stt hdrs body)
+
+instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes WorkerResponse where
+  handleWorkerAcceptH ctypes (AcceptHeader accept) resp = do
+    let amrs = map ((,) <$> id <*> BSL.fromStrict . M.renderHeader) $ allMime ctypes
+    hdr <- M.mapAcceptMedia amrs accept
+    pure
+      ( hdr
+      , \stt hdrs -> do
+          rspHeaders <- Resp.getHeaders resp
+          forM_ hdrs $ \(k, v) -> do
+            k' <- fromHaskellByteString $ CI.original k
+            v' <- fromHaskellByteString v
+            H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
+          Resp.setStatus resp $ fromIntegral stt.statusCode
+          Resp.setStatusText resp $ TE.decodeUtf8 stt.statusMessage
+          pure $ RawResponse resp
+      )
 
 instance
   {-# OVERLAPPABLE #-}
   ( AllCTRender ctypes a
+  , AllMime ctypes
+  ) =>
+  AllWorkerCTRender ctypes a
+  where
+  handleWorkerAcceptH ctypes acceptH =
+    fmap (Bi.second $ \bdy status hdrs -> pure $ responseLBS status hdrs bdy) . handleAcceptH ctypes acceptH
+
+instance
+  {-# OVERLAPPABLE #-}
+  ( AllWorkerCTRender ctypes a
   , ReflectMethod method
   , KnownNat status
   ) =>
@@ -375,7 +430,7 @@ instance
 
 instance
   {-# OVERLAPPING #-}
-  ( AllCTRender ctypes a
+  ( AllWorkerCTRender ctypes a
   , ReflectMethod method
   , KnownNat status
   , GetHeaders (Headers h a)

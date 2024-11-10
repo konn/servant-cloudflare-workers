@@ -289,7 +289,7 @@ runAction ::
   JSObject e ->
   FetchContext ->
   (RouteResult RoutingResponse -> IO r) ->
-  (a -> RouteResult RoutingResponse) ->
+  (a -> IO (RouteResult RoutingResponse)) ->
   IO r
 runAction action env req bind fenv respond k =
   runDelayed action env req bind fenv >>= go
@@ -303,7 +303,7 @@ runAction action env req bind fenv respond k =
         Left err ->
           liftIO . respond . Route . RawResponse
             =<< responseServerReturn err
-        Right (x, (getAp .) -> fin) -> liftIO . respond' $ k x
+        Right (x, (getAp .) -> fin) -> liftIO . respond' =<< k x
           where
             respond' resl = do
               case resl of
