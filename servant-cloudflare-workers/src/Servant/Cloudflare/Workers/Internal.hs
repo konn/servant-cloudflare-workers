@@ -119,6 +119,7 @@ import Servant.Cloudflare.Workers.Internal.ServerError
 import qualified Streaming.ByteString as Q
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Read (readMaybe)
+import qualified Wasm.Prelude.Linear as PL
 import Web.HttpApiData (
   FromHttpApiData,
   parseHeader,
@@ -401,12 +402,21 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
             v' <- fromHaskellByteString v
             H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
             consoleLog $ fromString $ "Set: " <> show k
-          consoleLog $ "Seting status code..."
-          Resp.setStatus resp $ fromIntegral stt.statusCode
           consoleLog $ "Seting status text..."
-          Resp.setStatusText resp $ TE.decodeUtf8 stt.statusMessage
+          sttMsg <- fromHaskellByteString stt.statusMessage
+          body <- fmap inject . fromNullable <$> Resp.getBody resp
+          encodeBody <- js_get_encodeBody resp
+          cf <- js_get_cf resp
           consoleLog $ "All done!"
-          pure $ RawResponse resp
+          fmap RawResponse $
+            Resp.newResponse' body $
+              Just $
+                newDictionary
+                  PL.$ setPartialField "status" (toJSPrim $ fromIntegral stt.statusCode)
+                  PL.. setPartialField "statusText" sttMsg
+                  PL.. setPartialField "headers" (inject rspHeaders)
+                  PL.. setPartialField "encodeBody" encodeBody
+                  PL.. setPartialField "cf" cf
       )
 
 instance
@@ -1262,6 +1272,12 @@ instance
             toServant server
           servantSrvN :: WorkerT e (ToServantApi api) n =
             hoistWorkerWithContext pe (Proxy @(ToServantApi api)) pctx nat servantSrvM
+
+foreign import javascript unsafe "$1.cf"
+  js_get_cf :: WorkerResponse -> IO JSAny
+
+foreign import javascript unsafe "$1.encodeBody"
+  js_get_encodeBody :: WorkerResponse -> IO JSByteString
 
 foreign import javascript unsafe "console.log($1)"
   consoleLog :: USVString -> IO ()
