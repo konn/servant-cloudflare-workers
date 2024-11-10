@@ -16,7 +16,7 @@ module Servant.Cloudflare.Workers.Internal (
   module Servant.Cloudflare.Workers.Internal.ServerError,
 ) where
 
-import Control.Monad (join)
+import Control.Monad (join, unless)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Bifunctor as Bi
 import qualified Data.ByteString as B
@@ -38,7 +38,7 @@ import Data.Word (Word16)
 import GHC.Generics
 import GHC.TypeLits (KnownNat, KnownSymbol, TypeError, symbolVal)
 import GHC.Wasm.Object.Builtins
-import GHC.Wasm.Web.Generated.Headers (js_cons_Headers)
+import GHC.Wasm.Web.Generated.Headers (js_cons_Headers, js_fun_has_ByteString_boolean)
 import qualified GHC.Wasm.Web.Generated.Headers as H
 import GHC.Wasm.Web.ReadableStream (ReadableStream, toReadableStream)
 import qualified GHC.Wasm.Web.ReadableStream as RS
@@ -388,7 +388,7 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Readab
     hdr <- M.mapAcceptMedia amrs accept
     pure (hdr, \stt hdrs -> pure $ responseStream stt hdrs body)
 
--- | N.B. Ignores the status.
+-- | N.B. Ignores the status. Favours the original Content-Type header if present.
 instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes WorkerResponse where
   handleWorkerAcceptH ctypes (AcceptHeader accept) resp = do
     let amrs = map ((,) <$> id <*> BSL.fromStrict . M.renderHeader) $ allMime ctypes
@@ -400,9 +400,11 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
           forM_ hdrs $ \(k, v) -> do
             k' <- fromHaskellByteString $ CI.original k
             v' <- fromHaskellByteString v
-            consoleLog $ fromString $ "Setting: " <> show (k, v)
-            H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
-            consoleLog $ fromString $ "Header Set: " <> show (k, v)
+            present <- js_fun_has_ByteString_boolean rspHeaders k'
+            unless ("Contenty-Type" /= k && present) do
+              consoleLog $ fromString $ "Setting: " <> show (k, v)
+              H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
+              consoleLog $ fromString $ "Header Set: " <> show (k, v)
           consoleLog "All headers set!"
           consoleLog $ "final headers: (next line)"
           js_skim_header rspHeaders
