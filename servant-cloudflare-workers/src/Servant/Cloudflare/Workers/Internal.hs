@@ -400,12 +400,19 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
           forM_ hdrs $ \(k, v) -> do
             k' <- fromHaskellByteString $ CI.original k
             v' <- fromHaskellByteString v
+            consoleLog $ fromString $ "Setting: " <> show (k, v)
             H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
+            consoleLog $ fromString $ "Header Set: " <> show (k, v)
+          consoleLog "All headers set!"
+          hdrstr <- js_stringify rspHeaders
+          consoleLog $ "final headers: (next line)"
+          consoleLog hdrstr
           sttCode <- js_get_status resp
           sttMsg <- js_get_statusText resp
           body <- fmap inject . fromNullable <$> Resp.getBody resp
           encodeBody <- js_get_encodeBody resp
           cf <- js_get_cf resp
+          consoleLog "Creating Response..."
           fmap RawResponse $
             Resp.newResponse' body $
               Just $
@@ -1285,3 +1292,6 @@ foreign import javascript unsafe "$1.statusText"
 
 foreign import javascript unsafe "console.log($1)"
   consoleLog :: USVString -> IO ()
+
+foreign import javascript unsafe "JSON.stringify($1)"
+  js_stringify :: JSObject a -> IO USVString
