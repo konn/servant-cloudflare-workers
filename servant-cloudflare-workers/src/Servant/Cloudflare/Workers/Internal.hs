@@ -392,13 +392,20 @@ instance {-# OVERLAPPING #-} (AllMime ctypes) => AllWorkerCTRender ctypes Worker
     pure
       ( hdr
       , \stt hdrs -> do
+          consoleLog "handleWorkerAcceptH"
           rspHeaders <- Resp.getHeaders resp
+          consoleLog "Headers get."
           forM_ hdrs $ \(k, v) -> do
+            consoleLog $ fromString $ "Setting: " <> show (k, v)
             k' <- fromHaskellByteString $ CI.original k
             v' <- fromHaskellByteString v
             H.js_fun_append_ByteString_ByteString_undefined rspHeaders k' v'
+            consoleLog $ fromString $ "Set: " <> show k
+          consoleLog $ "Seting status code..."
           Resp.setStatus resp $ fromIntegral stt.statusCode
+          consoleLog $ "Seting status text..."
           Resp.setStatusText resp $ TE.decodeUtf8 stt.statusMessage
+          consoleLog $ "All done!"
           pure $ RawResponse resp
       )
 
@@ -1255,3 +1262,6 @@ instance
             toServant server
           servantSrvN :: WorkerT e (ToServantApi api) n =
             hoistWorkerWithContext pe (Proxy @(ToServantApi api)) pctx nat servantSrvM
+
+foreign import javascript unsafe "console.log($1)"
+  consoleLog :: USVString -> IO ()
